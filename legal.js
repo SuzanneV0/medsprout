@@ -87,7 +87,7 @@ const LEGAL_PAGES = {
 
       <h2>Third-party services and licences</h2>
       <ul>
-        <li><strong>Hosting:</strong> the website is hosted by Vercel Inc.</li>
+        <li><strong>Hosting and anonymous visit counts:</strong> Vercel Inc. (Vercel Web Analytics)</li>
         <li><strong>Fonts:</strong> Cal Sans and Questrial, both licensed under the SIL Open Font License 1.1, delivered by Google Fonts.</li>
       </ul>
 
@@ -99,7 +99,7 @@ const LEGAL_PAGES = {
   privacy: {
     title: 'Privacy Policy',
     body: () => `
-      <div class="notice"><strong>In short:</strong> Medsprout does not collect, receive or store your health information. Everything you enter stays in your browser, on your device. There are no accounts, no analytics and no advertising.</div>
+      <div class="notice"><strong>In short:</strong> Medsprout does not collect, receive or store your health information. Everything you enter stays in your browser, on your device. There are no accounts and no advertising. We only count visits anonymously, without tracking cookies, to know roughly how many people use the App and in which countries.</div>
 
       <h2>1. Who we are</h2>
       <p>Medsprout is operated by ${legalVal(LEGAL_INFO.owner)} (“we”, “us”). Contact: ${legalVal(LEGAL_INFO.email)}.</p>
@@ -113,6 +113,7 @@ const LEGAL_PAGES = {
       <ul>
         <li><strong>Website hosting (Vercel).</strong> Your browser downloads the App’s files from our hosting provider, Vercel Inc. As with any website, Vercel may automatically process technical information such as your IP address, browser type and the time of the request, for example in server logs used for security and delivery. This does not include anything you enter into the App. See <a href="https://vercel.com/legal/privacy-policy" target="_blank" rel="noopener">Vercel’s privacy policy</a>.</li>
         <li><strong>Fonts (Google Fonts).</strong> The App’s fonts are loaded from Google Fonts, so Google receives your IP address and browser information when the fonts are downloaded. See <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Google’s privacy policy</a>.</li>
+        <li><strong>Anonymous visit counts (Vercel Web Analytics).</strong> When you open the App, an anonymous page view is recorded, including the page address, the referring website, your browser, operating system and device type, and your approximate location at country level, derived from your connection. It does not use third-party cookies. Instead, visits are counted with an anonymous code generated from the request, which is discarded after 24 hours. The data isn’t tied to your IP address, and it can’t identify you or follow you across other websites. It never includes anything you enter into the App. We use these totals only to understand how many people use Medsprout and roughly where. See <a href="https://vercel.com/docs/analytics/privacy-policy" target="_blank" rel="noopener">Vercel’s analytics privacy notice</a>.</li>
       </ul>
       <p>We do not use this technical information to identify you, and we do not combine it with anything else.</p>
 
@@ -125,7 +126,7 @@ const LEGAL_PAGES = {
       <h2>6. What we don’t do</h2>
       <ul>
         <li>No accounts or sign-in</li>
-        <li>No analytics, tracking pixels or advertising</li>
+        <li>No advertising, tracking pixels or cross-site tracking. Our only analytics are the anonymous visit counts described above.</li>
         <li>No selling, renting or sharing of personal information</li>
         <li>No cookies (see the <a href="#cookies">Cookies Policy</a>)</li>
       </ul>
@@ -170,7 +171,7 @@ const LEGAL_PAGES = {
       </table></div>
 
       <h2>3. Third parties</h2>
-      <p>The App is hosted by Vercel and loads its fonts from Google Fonts. Medsprout does not ask either of them to set cookies. Their handling of technical request information is described in <a href="https://vercel.com/legal/privacy-policy" target="_blank" rel="noopener">Vercel’s privacy policy</a> and <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Google’s privacy policy</a>.</p>
+      <p>The App is hosted by Vercel, counts visits anonymously with Vercel Web Analytics (which does not use third-party cookies) and loads its fonts from Google Fonts. Medsprout does not ask any of them to set cookies. Their handling of technical request information is described in <a href="https://vercel.com/legal/privacy-policy" target="_blank" rel="noopener">Vercel’s privacy policy</a> and <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Google’s privacy policy</a>.</p>
 
       <h2>4. Managing or clearing this storage</h2>
       <p>You can delete everything Medsprout stores with <em>Settings → Erase all data</em>, or by clearing this site’s data in your browser settings. Doing so permanently deletes your medications and history from this device, so export a backup first if you want to keep them.</p>
