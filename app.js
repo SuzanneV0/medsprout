@@ -46,36 +46,154 @@ const defaults = () => ({
   settings: { graceMin: 30, refillWindowDays: 3, notifications: false },
 });
 
-/** Fill in anything missing from older saved data or backups (before family members existed). */
-function upgrade(s) {
+/* ---------- validating saved data and backups ----------
+   Everything is rebuilt field by field with the right type, format and length, so a
+   doctored or damaged backup can't put HTML/script into the page or crash the app.
+   Bad entries are dropped (and counted) rather than rejecting the whole file. */
+const V = {
+  id: v => typeof v === 'string' && /^[A-Za-z0-9_-]{1,40}$/.test(v),
+  day: v => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) && !isNaN(parseDay(v)),
+  hhmm: v => typeof v === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(v),
+  iso: v => typeof v === 'string' && v.length <= 40 && !isNaN(Date.parse(v)),
+  str: (v, max) => (typeof v === 'string' ? v.slice(0, max) : ''),
+  num: (v, lo, hi, d) => { const n = Number(v); return v !== '' && v !== null && Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : d; },
+  int: (v, lo, hi, d) => Math.round(V.num(v, lo, hi, d)),
+  pick: (v, list, d) => (list.includes(v) ? v : d),
+  obj: v => v !== null && typeof v === 'object' && !Array.isArray(v),
+};
+
+/** Returns { data, dropped }. Also migrates older saves (before family members, colours, "User 1"). */
+function sanitizeState(raw) {
+  if (!V.obj(raw)) throw new Error('not a Medsprout backup');
   const d = defaults();
-  s = { ...d, ...s, settings: { ...d.settings, ...s.settings } };
-  if (!Array.isArray(s.people) || !s.people.length) s.people = d.people;
-  s.people.forEach(p => { if (p.id === 'me' && p.name === 'Me') p.name = nextUserName(s.people); });
-  const first = s.people[0].id;
-  const known = id => s.people.some(p => p.id === id);
-  s.meds.forEach((m, i) => {
-    if (!known(m.personId)) m.personId = first;
-    if (m.kind !== 'vitamin') m.kind = 'med';
-    if (!Number.isInteger(m.color)) m.color = i % PILL_COLORS.length;
+  let dropped = 0;
+  const list = v => (Array.isArray(v) ? v : []);
+
+  // People
+  const people = [];
+  for (const p of list(raw.people)) {
+    if (!V.obj(p) || !V.id(p.id) || people.some(x => x.id === p.id) || !V.str(p.name, 40).trim()) { dropped++; continue; }
+    people.push({ id: p.id, name: V.str(p.name, 40).trim(), color: V.int(p.color, 0, 999, people.length) });
+  }
+  if (!people.length) people.push(...d.people);
+  people.forEach(p => { if (p.id === 'me' && p.name === 'Me') p.name = nextUserName(people); });
+  const known = id => people.some(p => p.id === id);
+  const first = people[0].id;
+
+  // Medications
+  const meds = [];
+  list(raw.meds).forEach((m, i) => {
+    if (!V.obj(m) || !V.id(m.id) || meds.some(x => x.id === m.id) || !V.str(m.name, 100).trim()) { dropped++; return; }
+    const t = V.obj(m.taper) ? m.taper : {};
+    const unit = V.pick(t.unit, ['days', 'weeks'], 'weeks');
+    const everyN = V.int(t.everyN, 1, 52, 1);
+    const r = V.obj(m.reminder) ? m.reminder : {};
+    meds.push({
+      id: m.id,
+      personId: known(m.personId) ? m.personId : first,
+      kind: m.kind === 'vitamin' ? 'vitamin' : 'med',
+      color: V.int(m.color, 0, PILL_COLORS.length - 1, i % PILL_COLORS.length),
+      name: V.str(m.name, 100).trim(),
+      strength: V.str(m.strength, 60),
+      instructions: V.str(m.instructions, 1000),
+      pillsPerDose: V.num(m.pillsPerDose, 0.25, 100, 1),
+      dosesPerDay: V.int(m.dosesPerDay, 1, 12, 1),
+      scheduleMode: V.pick(m.scheduleMode, ['even', 'interval', 'custom'], 'even'),
+      firstDose: V.hhmm(m.firstDose) ? m.firstDose : '08:00',
+      lastDose: V.hhmm(m.lastDose) ? m.lastDose : '20:00',
+      intervalHours: V.num(m.intervalHours, 0.5, 24, 8),
+      customTimes: list(m.customTimes).filter(V.hhmm).slice(0, 12),
+      pillsPerBottle: V.num(m.pillsPerBottle, 0, 100000, 0),
+      pillsRemaining: V.num(m.pillsRemaining, 0, 100000, 0),
+      refillsLeft: m.refillsLeft === '' || m.refillsLeft == null ? '' : V.int(m.refillsLeft, 0, 99, ''),
+      active: m.active !== false,
+      reminder: { enabled: r.enabled !== false, leadMin: V.int(r.leadMin, 0, 240, 0) },
+      taper: {
+        enabled: t.enabled === true,
+        startDate: V.day(t.startDate) ? t.startDate : dayKey(),
+        startDaily: V.num(t.startDaily, 0, 100, 1),
+        reduceBy: V.num(t.reduceBy, 0, 100, 1),
+        everyN, unit, everyDays: everyN * (unit === 'days' ? 1 : 7),
+      },
+      refills: list(m.refills).filter(x => V.obj(x) && V.day(x.date)).slice(-500)
+        .map(x => ({ date: x.date, pills: V.num(x.pills, 0, 100000, 0), note: V.str(x.note, 120) })),
+      ...(V.iso(m.createdAt) ? { createdAt: m.createdAt } : {}),
+      ...(V.day(m.startDate) ? { startDate: m.startDate } : {}),
+    });
+    if (m.scheduleMode === 'custom' && !meds[meds.length - 1].customTimes.length) meds[meds.length - 1].scheduleMode = 'even';
   });
-  s.sideEffects.forEach(e => {
-    if (!known(e.personId)) e.personId = (s.meds.find(m => m.id === e.medId) || {}).personId || first;
-  });
-  if (s.viewing !== 'all' && !known(s.viewing)) s.viewing = 'all';
-  return s;
+  const medIds = new Set(meds.map(m => m.id));
+
+  // Dose history: { day: { medId: { slot: { status, at, pills } } } }
+  const doses = {};
+  if (V.obj(raw.doses)) for (const [day, byMed] of Object.entries(raw.doses)) {
+    if (!V.day(day) || !V.obj(byMed)) { dropped++; continue; }
+    for (const [mid, bySlot] of Object.entries(byMed)) {
+      if (!medIds.has(mid) || !V.obj(bySlot)) continue; // records for deleted meds are just old history
+      for (const [idx, rec] of Object.entries(bySlot)) {
+        if (!/^\d{1,2}$/.test(idx) || !V.obj(rec) || !['taken', 'skipped'].includes(rec.status) || !V.iso(rec.at)) { dropped++; continue; }
+        ((doses[day] = doses[day] || {})[mid] = doses[day][mid] || {})[idx] = { status: rec.status, at: rec.at, pills: V.num(rec.pills, 0, 1000, 0) };
+      }
+    }
+  }
+
+  // Side effects
+  const sideEffects = [];
+  for (const e of list(raw.sideEffects)) {
+    if (!V.obj(e) || !V.id(e.id) || !V.str(e.symptom, 100).trim() || !V.iso(e.at)) { dropped++; continue; }
+    const med = medIds.has(e.medId) ? meds.find(m => m.id === e.medId) : null;
+    sideEffects.push({
+      id: e.id,
+      personId: known(e.personId) ? e.personId : (med ? med.personId : first),
+      medId: med ? med.id : '',
+      medName: V.str(e.medName, 100),
+      symptom: V.str(e.symptom, 100).trim(),
+      severity: V.int(e.severity, 1, 5, 3),
+      at: e.at,
+      notes: V.str(e.notes, 1000),
+    });
+  }
+
+  // Settings and bookkeeping (notification/snooze keys are only ever used as lookup keys)
+  const s = V.obj(raw.settings) ? raw.settings : {};
+  const settings = {
+    graceMin: V.int(s.graceMin, 5, 240, d.settings.graceMin),
+    refillWindowDays: V.int(s.refillWindowDays, 1, 30, d.settings.refillWindowDays),
+    notifications: s.notifications === true,
+    hideWelcome: s.hideWelcome === true,
+    persistAsked: s.persistAsked === true,
+    lastBackup: V.num(s.lastBackup, 0, 1e14, 0),
+    backupNudgeAfter: V.num(s.backupNudgeAfter, 0, 1e14, 0),
+  };
+  const timestamps = o => Object.fromEntries(Object.entries(V.obj(o) ? o : {})
+    .filter(([key, v]) => key.length <= 120 && Number.isFinite(v)).slice(-2000));
+
+  return {
+    data: {
+      people, meds, doses, sideEffects, settings,
+      viewing: raw.viewing === 'all' || known(raw.viewing) ? raw.viewing || 'all' : 'all',
+      notified: timestamps(raw.notified),
+      snoozes: timestamps(raw.snoozes),
+    },
+    dropped,
+  };
 }
+const upgrade = raw => sanitizeState(raw).data;
 
 let state = load();
 function load() {
+  let raw = null;
   try {
-    let raw = localStorage.getItem(STORE_KEY);
+    raw = localStorage.getItem(STORE_KEY);
     if (!raw && (raw = localStorage.getItem(LEGACY_STORE_KEY))) {
       localStorage.setItem(STORE_KEY, raw);
       localStorage.removeItem(LEGACY_STORE_KEY);
     }
     if (raw) return upgrade(JSON.parse(raw));
-  } catch (e) { /* fall through */ }
+  } catch (e) {
+    // Never silently lose someone's medications: keep the unreadable copy aside before starting fresh.
+    try { if (raw) localStorage.setItem(`${STORE_KEY}:unreadable-${Date.now()}`, raw); } catch (_) { /* storage full */ }
+  }
   return defaults();
 }
 function save() {
@@ -221,18 +339,27 @@ function daySchedule(med, k) {
   return out;
 }
 
+/** The real moment a dose happens (ms). A schedule's times can pass midnight (e.g. every 8 h from 8 PM). */
+const slotAt = s => { const d = parseDay(s.k); return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, s.time).getTime(); };
+
+/**
+ * Every dose that actually happens on calendar day k: that day's schedule up to midnight,
+ * plus doses from the previous day's schedule that fall after midnight. Each slot keeps its
+ * own schedule day (s.k, s.key) for records, and gets `clock` (minutes on day k) for display.
+ */
 function allSlots(k, meds = state.meds) {
-  return meds.flatMap(m => daySchedule(m, k)).sort((a, b) => a.time - b.time);
+  const prev = dayKey(addDays(parseDay(k), -1));
+  return meds.flatMap(m => [
+    ...daySchedule(m, prev).filter(s => s.time >= 1440),
+    ...daySchedule(m, k).filter(s => s.time < 1440),
+  ]).map(s => ({ ...s, clock: s.time % 1440, at: slotAt(s) })).sort((a, b) => a.at - b.at);
 }
 
 function slotStatus(slot) {
   if (slot.rec) return slot.rec.status;
-  const today = dayKey();
-  if (slot.k < today) return 'missed';
-  if (slot.k > today) return 'upcoming';
-  const n = nowMin();
-  if (n < slot.time) return 'upcoming';
-  if (n < slot.time + num(state.settings.graceMin, 30)) return 'due';
+  const minsSince = (Date.now() - slotAt(slot)) / 60000;
+  if (minsSince < 0) return 'upcoming';
+  if (minsSince < num(state.settings.graceMin, 30)) return 'due';
   return 'missed';
 }
 
@@ -279,7 +406,7 @@ function takeDose(key) {
   const slot = findSlot(key);
   if (!slot || slot.rec) return;
   const med = slot.med;
-  const late = nowMin() - slot.time;
+  const late = (Date.now() - slotAt(slot)) / 60000;
   setRec(slot.k, med.id, slot.idx, { status: 'taken', at: new Date().toISOString(), pills: slot.pills });
   med.pillsRemaining = Math.max(0, num(med.pillsRemaining) - slot.pills);
   delete state.snoozes[key];
@@ -349,20 +476,23 @@ function notifyOnce(key, title, body, level, slotKey) {
 }
 
 function tick() {
-  const k = dayKey(), n = nowMin(), now = Date.now();
-  for (const slot of allSlots(k)) {
+  const k = dayKey(), now = Date.now();
+  // Today's doses, plus early-tomorrow doses whose "remind me before" window starts tonight.
+  const soon = allSlots(dayKey(addDays(new Date(), 1))).filter(s => s.at - now < 2 * 3600000);
+  for (const slot of [...allSlots(k), ...soon]) {
     const med = slot.med, st = slotStatus(slot);
     const rem = med.reminder || { enabled: true, leadMin: 0 };
     const pillsTxt = `Take ${fmtPills(slot.pills)}${med.strength ? ` (${med.strength})` : ''}.`;
     if (!slot.rec && rem.enabled) {
       const lead = num(rem.leadMin);
-      if (lead > 0 && n >= slot.time - lead && n < slot.time)
-        notifyOnce(`${slot.key}|pre`, `${medLabel(med)} in ${lead} min`, `${pillsTxt} Due at ${fmtMin(slot.time)}.`, '', slot.key);
+      const minsUntil = (slot.at - now) / 60000;
+      if (lead > 0 && minsUntil <= lead && minsUntil > 0)
+        notifyOnce(`${slot.key}|pre`, `${medLabel(med)} in ${lead} min`, `${pillsTxt} Due at ${fmtMin(slot.clock)}.`, '', slot.key);
       if (st === 'due')
         notifyOnce(`${slot.key}|due|${Math.round(slot.time)}`, `Time to take ${medLabel(med)}`, `${pillsTxt} ${med.instructions ? med.instructions : ''}`.trim(), '', slot.key);
     }
     if (st === 'missed' && !slot.rec)
-      notifyOnce(`${slot.key}|missed|${Math.round(slot.time)}`, `Missed dose: ${medLabel(med)}`, `It was due at ${fmtMin(slot.time)}. Take it now or skip it and your next dose will be re-spaced.`, 'danger', slot.key);
+      notifyOnce(`${slot.key}|missed|${Math.round(slot.time)}`, `Missed dose: ${medLabel(med)}`, `It was due at ${fmtMin(slot.clock)}. Take it now or skip it and your next dose will be re-spaced.`, 'danger', slot.key);
     const sz = state.snoozes[slot.key];
     if (sz && now >= sz && !slot.rec) {
       delete state.snoozes[slot.key];
@@ -442,6 +572,8 @@ document.addEventListener('click', e => {
   else if (act === 'delete-effect') { state.sideEffects = state.sideEffects.filter(x => x.id !== id); save(); render(); }
   else if (act === 'notify') enableNotifications();
   else if (act === 'view-person') { state.viewing = id; save(); render(); }
+  else if (act === 'backup-now') exportBackup() || render();
+  else if (act === 'backup-later') { state.settings.backupNudgeAfter = Date.now() + 14 * 86400000; save(); render(); }
   else if (act === 'hide-welcome') { state.settings.hideWelcome = true; save(); render(); toast('Welcome message hidden. You can turn it back on in Settings.'); }
   else if (act === 'add-person') personModal();
   else if (act === 'rename-person') personModal(id);
@@ -556,21 +688,21 @@ function viewToday() {
   const alerts = [];
   statuses.filter(x => x.st === 'missed').forEach(({ s }) => {
     const next = daySchedule(s.med, k).find(o => o.idx > s.idx && !o.rec);
-    const nearNext = next && next.base - nowMin() < gapMin(s.med) / 2;
+    const nearNext = next && (slotAt({ k: next.k, time: next.base }) - Date.now()) / 60000 < gapMin(s.med) / 2;
     alerts.push(`<div class="alert missed" role="alert"><div class="alert-body">
       <strong>Missed: ${esc(medLabel(s.med))}</strong>
-      <p>${fmtPills(s.pills)} was due at ${fmtMin(s.time)}.${nearNext ? ` Your next dose is at ${fmtMin(next.base)} — many labels say to skip a missed dose if the next one is close. Check your label or ask your pharmacist.` : ' Take it now and your next dose will be re-spaced automatically.'}</p></div>
-      <div class="row"><button class="btn take sm" data-act="take" data-key="${s.key}">Take now</button>
-      <button class="btn ghost sm" data-act="skip" data-key="${s.key}">Skip</button></div></div>`);
+      <p>${fmtPills(s.pills)} was due at ${fmtMin(s.clock)}.${nearNext ? ` Your next dose is at ${fmtMin(next.base % 1440)} — many labels say to skip a missed dose if the next one is close. Check your label or ask your pharmacist.` : ' Take it now and your next dose will be re-spaced automatically.'}</p></div>
+      <div class="row"><button class="btn take sm" data-act="take" data-key="${esc(s.key)}">Take now</button>
+      <button class="btn ghost sm" data-act="skip" data-key="${esc(s.key)}">Skip</button></div></div>`);
   });
   meds.forEach(m => {
     const r = refillStatus(m);
     if (r.level === 'out') alerts.push(`<div class="alert out" role="alert"><div class="alert-body"><strong>${isVitamin(m) ? 'Out of stock' : 'Prescription not refilled'}: ${esc(medLabel(m))}</strong>
       <p>${num(m.pillsRemaining) <= 0 ? 'You are out of pills.' : `Only ${fmtPills(num(m.pillsRemaining))} left — not enough for today.`} Refill now so you don't miss doses.</p></div>
-      <button class="btn sm" data-act="refill" data-id="${m.id}">Log refill</button></div>`);
+      <button class="btn sm" data-act="refill" data-id="${esc(m.id)}">Log refill</button></div>`);
     else if (r.level === 'soon') alerts.push(`<div class="alert soon"><div class="alert-body"><strong>${isVitamin(m) ? 'Restock soon' : 'Refill soon'}: ${esc(medLabel(m))}</strong>
       <p>About ${r.days} day${r.days === 1 ? '' : 's'} of pills left — runs out ${fmtDate(r.runOut)}. ${isVitamin(m) ? 'Pick up more soon.' : 'Order your refill now.'}</p></div>
-      <button class="btn sm" data-act="refill" data-id="${m.id}">Log refill</button></div>`);
+      <button class="btn sm" data-act="refill" data-id="${esc(m.id)}">Log refill</button></div>`);
   });
 
   const cards = statuses.map(({ s, st }) => doseCard(s, st)).join('');
@@ -579,6 +711,7 @@ function viewToday() {
   return `<div class="page-head"><div><h1>Today</h1><p>${dateLine}</p></div>
     ${notifBanner()}</div>
     ${alerts.length ? `<div class="alerts">${alerts.join('')}</div>` : ''}
+    ${backupReminder()}
     <div class="card summary">
       <div><div class="big-num">${done}/${counted}</div><small>doses taken</small></div>
       <div class="progress" aria-label="Doses taken"><span style="width:${counted ? (done / counted) * 100 : 0}%"></span></div>
@@ -586,7 +719,7 @@ function viewToday() {
     <div class="section"><h2>Schedule</h2>
       ${slots.length ? `<div class="timeline">${cards}</div>` : '<p class="muted">No doses scheduled today.</p>'}
     </div>
-    ${tomorrow.length ? `<div class="section"><h2>Tomorrow</h2><div class="row">${tomorrow.map(s => `<span class="time-chip">${pillIcon(s.med, 18)}${fmtMin(s.time)} · ${esc(medLabel(s.med))} × ${fmtNum(s.pills)}</span>`).join('')}</div></div>` : ''}
+    ${tomorrow.length ? `<div class="section"><h2>Tomorrow</h2><div class="row">${tomorrow.map(s => `<span class="time-chip">${pillIcon(s.med, 18)}${fmtMin(s.clock)} · ${esc(medLabel(s.med))} × ${fmtNum(s.pills)}</span>`).join('')}</div></div>` : ''}
     <div class="section"><h2>This week</h2>${weekStrip(meds)}</div>`;
 }
 
@@ -598,14 +731,14 @@ function doseCard(s, st) {
   if (st === 'taken' || st === 'skipped') {
     const at = new Date(s.rec.at);
     actions = `<span class="muted">${st === 'taken' ? 'Taken' : 'Skipped'} at ${at.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>
-      <button class="linkish" data-act="undo" data-key="${s.key}">Undo</button>`;
+      <button class="linkish" data-act="undo" data-key="${esc(s.key)}">Undo</button>`;
   } else {
-    actions = `<button class="btn take sm" data-act="take" data-key="${s.key}">${st === 'upcoming' ? 'Take early' : 'Mark taken'}</button>
-      ${st !== 'upcoming' ? `<button class="btn ghost sm" data-act="snooze" data-key="${s.key}">${snoozed ? 'Snoozed' : 'Snooze 10 min'}</button>` : ''}
-      <button class="btn ghost sm" data-act="skip" data-key="${s.key}">Skip</button>`;
+    actions = `<button class="btn take sm" data-act="take" data-key="${esc(s.key)}">${st === 'upcoming' ? 'Take early' : 'Mark taken'}</button>
+      ${st !== 'upcoming' ? `<button class="btn ghost sm" data-act="snooze" data-key="${esc(s.key)}">${snoozed ? 'Snoozed' : 'Snooze 10 min'}</button>` : ''}
+      <button class="btn ghost sm" data-act="skip" data-key="${esc(s.key)}">Skip</button>`;
   }
   return `<article class="dose ${st}">
-    <div class="dose-time">${fmtMin(s.time)}${s.shifted ? `<s>${fmtMin(s.base)}</s><span class="moved">re-spaced</span>` : ''}</div>
+    <div class="dose-time">${fmtMin(s.clock)}${s.shifted ? `<s>${fmtMin(s.base % 1440)}</s><span class="moved">re-spaced</span>` : ''}</div>
     <div>
       <div class="row"><h3 class="med-title">${pillIcon(m)}${esc(m.name)}</h3>${whoTag(m)}<span class="chip ${st}">${label}</span>${taperActive(m, s.k) ? '<span class="chip taper">Taper</span>' : ''}</div>
       <p class="meta">${fmtPills(s.pills)}${m.strength ? ` · ${esc(m.strength)}` : ''}${m.instructions ? ` · ${esc(m.instructions)}` : ''}</p>
@@ -672,10 +805,10 @@ function viewMeds() {
       <div class="progress stock ${m.active ? r.level : ''}"><span style="width:${pct}%"></span></div>
       ${m.refillsLeft !== '' && m.refillsLeft != null ? `<p class="muted" style="margin:8px 0 0;font-size:.88rem">Refills left on prescription: ${esc(m.refillsLeft)}</p>` : ''}
       <div class="row" style="margin-top:14px">
-        <button class="btn sm" data-act="refill" data-id="${m.id}">Log refill</button>
-        <a class="btn ghost sm" href="#med/${m.id}">Edit</a>
-        <button class="btn ghost sm" data-act="pause" data-id="${m.id}">${m.active ? 'Pause' : 'Resume'}</button>
-        <button class="btn ghost sm" data-act="delete-med" data-id="${m.id}">Delete</button>
+        <button class="btn sm" data-act="refill" data-id="${esc(m.id)}">Log refill</button>
+        <a class="btn ghost sm" href="#med/${esc(m.id)}">Edit</a>
+        <button class="btn ghost sm" data-act="pause" data-id="${esc(m.id)}">${m.active ? 'Pause' : 'Resume'}</button>
+        <button class="btn ghost sm" data-act="delete-med" data-id="${esc(m.id)}">Delete</button>
       </div>
       <details><summary>Refill history (${refills.length})</summary>
         ${refills.length ? `<ul class="mini-list">${refills.map(r => `<li><span>${fmtDate(r.date, { month: 'short', day: 'numeric', year: 'numeric' })}</span><span>+${fmtPills(r.pills)}${r.note ? ` · ${esc(r.note)}` : ''}</span></li>`).join('')}</ul>` : '<p class="muted">No refills logged yet.</p>'}
@@ -843,7 +976,7 @@ function viewMedForm(id) {
 const customTimeRow = v => `<div class="row"><input type="time" name="customTime" value="${esc(v)}" style="flex:1"><button type="button" class="btn ghost sm" data-rm-time aria-label="Remove time">Remove</button></div>`;
 
 const personOptions = selected => state.people
-  .map(p => `<option value="${p.id}" ${p.id === selected ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
+  .map(p => `<option value="${esc(p.id)}" ${p.id === selected ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
 
 /* ---------- Scan a label (reading happens in scan.js, on the device) ---------- */
 async function scanIntoForm(form, file) {
@@ -1055,6 +1188,7 @@ function bindMedForm(id) {
       m.startDate = dayKey();
       m.refills = [];
       state.meds.push(m);
+      requestPersistentStorage();
       if (state.viewing !== 'all' && state.viewing !== m.personId) state.viewing = m.personId;
       flashMedId = m.id;
       toast(`${m.name} added — reminders scheduled.`, 'success');
@@ -1091,11 +1225,11 @@ function viewTapers() {
     const t = m.taper;
     const notStarted = today < t.startDate;
     const next = steps.find(s => s.start > today);
-    return `<article class="card"><div class="row"><h2 class="med-title" style="margin:0">${pillIcon(m, 32)}${esc(m.name)}</h2>${whoTag(m)}<span class="chip taper">Reduce ${fmtNum(t.reduceBy)} every ${t.everyN} ${t.unit === 'days' ? (t.everyN === 1 ? 'day' : 'days') : (t.everyN === 1 ? 'week' : 'weeks')}</span></div>
+    return `<article class="card"><div class="row"><h2 class="med-title" style="margin:0">${pillIcon(m, 32)}${esc(m.name)}</h2>${whoTag(m)}<span class="chip taper">Reduce ${fmtNum(t.reduceBy)} every ${num(t.everyN, 1)} ${t.unit === 'days' ? (t.everyN === 1 ? 'day' : 'days') : (t.everyN === 1 ? 'week' : 'weeks')}</span></div>
       <p class="muted" style="margin:8px 0 14px">${notStarted ? `Starts ${fmtDate(t.startDate)}.` : cur ? `Now: <strong style="color:var(--linen)">${fmtPills(cur.daily)} a day</strong> (step ${cur.step} of ${steps.length - 1}).` : 'Taper complete.'}
       ${next ? ` Next change ${fmtDate(next.start)} → ${next.daily > 0 ? fmtPills(next.daily) + ' a day' : 'stop'}.` : ''}</p>
       ${taperTable(m, steps, today)}
-      <div class="row" style="margin-top:12px"><a class="btn ghost sm" href="#med/${m.id}">Edit taper</a></div></article>`;
+      <div class="row" style="margin-top:12px"><a class="btn ghost sm" href="#med/${esc(m.id)}">Edit taper</a></div></article>`;
   }).join('')}</div>
   <p class="muted" style="margin-top:18px">Never change a taper without talking to your prescriber.</p>`;
 }
@@ -1114,8 +1248,8 @@ function viewEffects() {
     .sort((a, b) => b.at.localeCompare(a.at));
   // Options are grouped by person when there's a family; "general" notes still belong to someone.
   const medOptions = people.map(p => {
-    const opts = meds.filter(m => m.personId === p.id).map(m => `<option value="${m.id}">${esc(m.name)}</option>`).join('')
-      + `<option value="general:${p.id}">Not sure / general</option>`;
+    const opts = meds.filter(m => m.personId === p.id).map(m => `<option value="${esc(m.id)}">${esc(m.name)}</option>`).join('')
+      + `<option value="general:${esc(p.id)}">Not sure / general</option>`;
     return isFamily() ? `<optgroup label="${esc(p.name)}">${opts}</optgroup>` : opts;
   }).join('');
   return `<div class="page-head"><div><h1>Side effects</h1><p>Keep notes to share with your doctor or pharmacist.</p></div></div>
@@ -1134,14 +1268,14 @@ function viewEffects() {
     </form>
     <div>
       <div class="row" style="margin-bottom:12px"><label for="e-filter" class="help">Show</label>
-        <select id="e-filter" style="flex:1"><option value="">All medications</option>${meds.map(m => `<option value="${m.id}" ${filter === m.id ? 'selected' : ''}>${esc(medLabel(m))}</option>`).join('')}</select></div>
+        <select id="e-filter" style="flex:1"><option value="">All medications</option>${meds.map(m => `<option value="${esc(m.id)}" ${filter === m.id ? 'selected' : ''}>${esc(medLabel(m))}</option>`).join('')}</select></div>
       ${list.length ? `<div class="grid">${list.map(e => {
         const m = getMed(e.medId);
         return `<article class="card effect"><div class="top"><h3>${esc(e.symptom)}</h3>
           <span class="sev" title="${SEV[e.severity]}">${[1, 2, 3, 4, 5].map(i => `<i class="${i <= e.severity ? 'on' : ''}"></i>`).join('')} <small>&nbsp;${SEV[e.severity]}</small></span></div>
           <small>${new Date(e.at).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })} · ${m ? esc(medLabel(m)) : esc([isFamily() && getPerson(e.personId) ? getPerson(e.personId).name : '', e.medName || 'General'].filter(Boolean).join(' · '))}</small>
           ${e.notes ? `<p class="note">${esc(e.notes)}</p>` : ''}
-          <div><button class="linkish" data-act="delete-effect" data-id="${e.id}">Delete</button></div></article>`;
+          <div><button class="linkish" data-act="delete-effect" data-id="${esc(e.id)}">Delete</button></div></article>`;
       }).join('')}</div>` : '<div class="empty"><p class="muted" style="margin:0">No side effects logged.</p></div>'}
     </div>
   </div>`;
@@ -1181,9 +1315,9 @@ function viewHistory() {
     if (!slots.length) continue;
     rows.push(`<article class="card"><div class="row"><h3 style="margin:0">${i === 0 ? 'Today' : i === 1 ? 'Yesterday' : fmtDate(k)}</h3>
       <span class="spacer"></span><small>${slots.filter(x => x.st === 'taken').length} of ${slots.filter(x => x.st !== 'skipped').length} taken</small></div>
-      <ul class="mini-list">${slots.map(({ s, st }) => `<li><span class="med-title">${pillIcon(s.med, 20)}${fmtMin(s.time)} · ${esc(medLabel(s.med))} × ${fmtNum(s.pills)}</span>
+      <ul class="mini-list">${slots.map(({ s, st }) => `<li><span class="med-title">${pillIcon(s.med, 20)}${fmtMin(s.clock)} · ${esc(medLabel(s.med))} × ${fmtNum(s.pills)}</span>
         <span>${st === 'taken' ? `<span class="chip taken">Taken ${new Date(s.rec.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>` : `<span class="chip ${st}">${st[0].toUpperCase() + st.slice(1)}</span>`}
-        ${s.rec ? ` <button class="linkish" data-act="undo" data-key="${s.key}">Undo</button>` : i > 0 ? ` <button class="linkish" data-act="take" data-key="${s.key}">Log as taken</button>` : ''}</span></li>`).join('')}</ul></article>`);
+        ${s.rec ? ` <button class="linkish" data-act="undo" data-key="${esc(s.key)}">Undo</button>` : i > 0 ? ` <button class="linkish" data-act="take" data-key="${esc(s.key)}">Log as taken</button>` : ''}</span></li>`).join('')}</ul></article>`);
   }
   return `<div class="page-head"><div><h1>History</h1><p>The last 14 days of doses.</p></div></div>
     ${rows.length ? `<div class="grid">${rows.join('')}</div>` : '<div class="empty"><p class="muted" style="margin:0">No dose history yet.</p></div>'}`;
@@ -1212,8 +1346,8 @@ function viewSettings() {
       <ul class="people-list">${state.people.map(p => {
         const count = state.meds.filter(m => m.personId === p.id).length;
         return `<li>${avatar(p)}<span class="people-name">${esc(p.name)}<small>${count} medication${count === 1 ? '' : 's'}</small></span>
-          <span class="people-actions"><button type="button" class="btn ghost sm" data-act="rename-person" data-id="${p.id}">Rename</button>
-          ${state.people.length > 1 ? `<button type="button" class="btn ghost sm" data-act="delete-person" data-id="${p.id}">Remove</button>` : ''}</span></li>`;
+          <span class="people-actions"><button type="button" class="btn ghost sm" data-act="rename-person" data-id="${esc(p.id)}">Rename</button>
+          ${state.people.length > 1 ? `<button type="button" class="btn ghost sm" data-act="delete-person" data-id="${esc(p.id)}">Remove</button>` : ''}</span></li>`;
       }).join('')}</ul>
       <button type="button" class="btn sm" data-act="add-person">+ Add family member</button>
     </fieldset>
@@ -1236,7 +1370,8 @@ function viewSettings() {
       <p style="margin:0"><strong>Android:</strong> open in Chrome, tap ⋮, then <em>Install app</em> (or <em>Add to Home screen</em>).</p>
     </fieldset>
     <fieldset><legend>Your data</legend>
-      <p class="help">Everything is stored only on this device, never on Medsprout. Export a backup to move it to another device. <a href="#privacy">Privacy Policy</a></p>
+      <p class="help">Everything is stored only on this device, never on Medsprout. Export a backup to keep a copy or move it to another device. <a href="#privacy">Privacy Policy</a></p>
+      <p class="help">Last backup: <strong>${state.settings.lastBackup ? new Date(state.settings.lastBackup).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : 'never'}</strong> · Storage: <strong id="storageStatus">checking…</strong></p>
       <div class="row"><button type="button" class="btn ghost sm" id="exportBtn">Export backup</button>
         <label class="btn ghost sm" for="importFile" style="cursor:pointer">Import backup</label><input type="file" id="importFile" accept="application/json" hidden>
         <button type="button" class="btn danger sm" id="resetBtn">Erase all data</button></div>
@@ -1244,8 +1379,43 @@ function viewSettings() {
   </form>`;
 }
 
+/* ---------- keeping data safe ---------- */
+/** Ask the browser not to clear Medsprout's storage when space is low or the site goes unused (once). */
+function requestPersistentStorage() {
+  if (state.settings.persistAsked || !navigator.storage || !navigator.storage.persist) return;
+  state.settings.persistAsked = true;
+  save();
+  navigator.storage.persisted().then(p => p || navigator.storage.persist()).catch(() => {});
+}
+
+/** Gentle reminder on Today: not on day one, then every 30 days since the last backup. */
+function backupReminder() {
+  const now = Date.now(), day = 86400000;
+  if (!state.meds.length || now < state.settings.backupNudgeAfter) return '';
+  if (state.settings.lastBackup && now - state.settings.lastBackup < 30 * day) return '';
+  const oldest = Math.min(...state.meds.map(m => Date.parse(m.createdAt) || now));
+  if (now - oldest < 2 * day) return '';
+  return `<div class="card backup-card"><div><strong>💾 Back up your medications</strong>
+    <p class="help">Medsprout keeps everything only on this device. A backup file protects your list if your phone is lost or the browser clears its data.</p></div>
+    <div class="row"><button class="btn sm" data-act="backup-now">Export backup</button><button class="btn ghost sm" data-act="backup-later">Later</button></div></div>`;
+}
+
+function exportBackup() {
+  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `medsprout-backup-${dayKey()}.json`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  state.settings.lastBackup = Date.now();
+  save();
+}
+
 function bindSettings() {
   const form = $('#settingsForm');
+  const st = $('#storageStatus');
+  if (st) (navigator.storage && navigator.storage.persisted ? navigator.storage.persisted() : Promise.resolve(null))
+    .then(p => { st.textContent = p ? 'protected from automatic clearing' : p === false ? 'may be cleared by the browser if unused (install the app and keep a backup)' : 'unknown'; });
   form.addEventListener('change', e => {
     if (e.target.name === 'graceMin' || e.target.name === 'refillWindowDays') {
       state.settings[e.target.name] = num(e.target.value);
@@ -1262,25 +1432,26 @@ function bindSettings() {
   if (test) test.addEventListener('click', () => sysNotify('Medsprout test', 'Reminders are working. 💊', 'test'));
   const off = $('#notifOff');
   if (off) off.addEventListener('click', () => { state.settings.notifications = false; save(); render(); });
-  $('#exportBtn').addEventListener('click', () => {
-    const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `medsprout-backup-${dayKey()}.json`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-  });
+  $('#exportBtn').addEventListener('click', exportBackup);
   $('#importFile').addEventListener('change', async e => {
     const f = e.target.files[0];
+    e.target.value = '';
     if (!f) return;
+    if (f.size > 5 * 1024 * 1024) { toast('That file is too large to be a Medsprout backup.', 'danger'); return; }
+    let result;
     try {
-      const data = JSON.parse(await f.text());
-      if (!Array.isArray(data.meds)) throw new Error('bad file');
-      confirmBox('Replace your data?', 'Importing replaces everything currently on this device with the backup.', 'Import', true, () => {
-        state = upgrade(data);
+      const parsed = JSON.parse(await f.text());
+      if (!V.obj(parsed) || !Array.isArray(parsed.meds)) throw new Error('bad file');
+      result = sanitizeState(parsed);
+    } catch (err) { toast('That file is not a Medsprout backup.', 'danger'); return; }
+    const { data, dropped } = result;
+    const summary = `${data.meds.length} medication${data.meds.length === 1 ? '' : 's'} and ${data.people.length} ${data.people.length === 1 ? 'person' : 'people'}`;
+    confirmBox('Replace your data?',
+      `This backup has ${summary}.${dropped ? ` <strong>${dropped} damaged entr${dropped === 1 ? 'y' : 'ies'} will be skipped.</strong>` : ''} Importing replaces everything currently on this device.`,
+      'Import', true, () => {
+        state = data;
         save(); toast('Backup imported.', 'success'); render();
       });
-    } catch (err) { toast('That file is not a Medsprout backup.', 'danger'); }
   });
   $('#resetBtn').addEventListener('click', () => confirmBox('Erase all data?', 'This deletes every medication, dose record and side-effect note on this device. Export a backup first if you might need it.', 'Erase everything', true, () => {
     state = defaults(); save(); toast('All data erased.'); location.hash = '#today'; render();
@@ -1342,6 +1513,7 @@ async function checkForUpdate() {
 }
 
 $('#year').textContent = new Date().getFullYear();
+if (state.meds.length) requestPersistentStorage();
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { tick(); checkForUpdate(); } });
 render();
 tick();
