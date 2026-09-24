@@ -4,7 +4,7 @@
     {
       "name": "medsprout",
       "runtimeExecutable": "python",
-      "runtimeArgs": ["-m", "http.server", "5188", "--directory", "C:\\Users\\suzan\\Med App"],
+      "runtimeArgs": ["-m", "http.server", "5188"],
       "port": 5188
     }
   ]
