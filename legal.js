@@ -89,10 +89,7 @@ const LEGAL_PAGES = {
       <ul>
         <li><strong>Hosting and anonymous visit counts:</strong> Vercel Inc. (Vercel Web Analytics)</li>
         <li><strong>Fonts:</strong> Cal Sans and Questrial, both licensed under the SIL Open Font License 1.1, delivered by Google Fonts.</li>
-      </ul>
-
-      <h2>Policies</h2>
-      <p><a href="#terms">Terms of Use</a> · <a href="#privacy">Privacy Policy</a> · <a href="#cookies">Cookies Policy</a></p>`,
+      </ul>`,
   },
 
   /* ---------------------------------------------------- */
