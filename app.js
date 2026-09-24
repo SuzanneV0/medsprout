@@ -915,7 +915,7 @@ function fillFromScan(form, r) {
   set('refillsLeft', r.refills);
 }
 
-/** The 20 colour choices, drawn in the medication's current type (capsule or vitamin). */
+/** All colour choices, drawn in the medication's current type (capsule or vitamin). */
 function swatchGrid(m) {
   const used = new Set(state.meds.filter(x => x.id !== m.id).map(x => x.color));
   return PILL_COLORS.map((c, i) => `<label class="swatch ${used.has(i) ? 'used' : ''}" title="${c.name}${used.has(i) ? ' (in use)' : ''}">

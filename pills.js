@@ -2,7 +2,7 @@
 
 /* =========================================================
    Medsprout — pill icons
-   20 two-tone colour combos. Medications are drawn as a
+   20 two-tone and 10 solid colours. Medications are drawn as a
    capsule; vitamins/supplements as a gummy bear.
    These colours only identify medications — status colours
    (missed, refill, taken) stay reserved for the brand palette.
@@ -29,6 +29,17 @@ const PILL_COLORS = [
   { name: 'Magenta & White',   a: '#D43F8D', b: '#F7F4EE' },
   { name: 'Red & Yellow',      a: '#D64541', b: '#F2C94C' },
   { name: 'Blue & Orange',     a: '#3E7CD6', b: '#F08A3C' },
+  // Solid colours (added from user feedback). Appended so existing colour numbers never change.
+  { name: 'Solid White',       a: '#F7F4EE', b: '#F7F4EE' },
+  { name: 'Solid Yellow',      a: '#F5D547', b: '#F5D547' },
+  { name: 'Solid Orange',      a: '#F39C33', b: '#F39C33' },
+  { name: 'Solid Red',         a: '#D9383A', b: '#D9383A' },
+  { name: 'Solid Pink',        a: '#F48FB1', b: '#F48FB1' },
+  { name: 'Solid Purple',      a: '#8E5BD6', b: '#8E5BD6' },
+  { name: 'Solid Blue',        a: '#3F6FD8', b: '#3F6FD8' },
+  { name: 'Solid Baby Blue',   a: '#9FD3F5', b: '#9FD3F5' },
+  { name: 'Solid Green',       a: '#3FA65A', b: '#3FA65A' },
+  { name: 'Solid Brown',       a: '#8A5A3B', b: '#8A5A3B' },
 ];
 
 const pillColor = i => PILL_COLORS[((Math.round(Number(i)) || 0) % PILL_COLORS.length + PILL_COLORS.length) % PILL_COLORS.length];
