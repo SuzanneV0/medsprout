@@ -375,3 +375,22 @@ dialog h2 { margin-bottom: 12px; }
   content: ''; position: absolute; top: 5px; right: 5px; width: 6px; height: 6px;
   border-radius: 50%; background: var(--muted);
 }
+
+/* ---------- Scan a label ---------- */
+.scan-card { margin-bottom: 18px; border-color: rgba(161, 205, 168, .45); }
+.scan-head { display: flex; gap: 12px; align-items: flex-start; }
+.scan-head h2 { margin: 0 0 4px; font-size: 1.15rem; }
+.scan-head .help { margin: 0 0 12px; }
+.scan-emoji { font-size: 1.6rem; line-height: 1; }
+.btn.disabled { opacity: .45; pointer-events: none; }
+.scan-status { display: flex; gap: 12px; align-items: flex-start; margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--line); }
+.scan-status > div { flex: 1; min-width: 0; }
+.scan-status p { margin: 0 0 6px; }
+.scan-thumb { width: 64px; height: 64px; object-fit: cover; border-radius: var(--radius-sm); flex: 0 0 auto; border: 1px solid var(--line); }
+.scan-progress { flex: 1; }
+.scan-warn { background: rgba(243, 233, 220, .08); border-left: 3px solid var(--linen); padding: 6px 10px; border-radius: 6px; font-size: .9rem; }
+.scan-status pre { white-space: pre-wrap; word-break: break-word; font-size: .8rem; background: var(--charcoal); padding: 10px; border-radius: var(--radius-sm); max-height: 220px; overflow: auto; }
+/* Fields filled from a scan stay outlined until edited, so people check them. */
+.scanned { border-color: var(--celadon) !important; box-shadow: 0 0 0 2px rgba(161, 205, 168, .35); }
+.seg.scanned { border-radius: 999px; }
+.scan-progress .progress > span { background: var(--celadon); }

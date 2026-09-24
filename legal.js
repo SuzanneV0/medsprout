@@ -29,6 +29,7 @@ const LEGAL_PAGES = {
 
       <h2>2. Not medical advice</h2>
       <p>Always follow the instructions from your prescriber, your pharmacist and your prescription label. Dose times, re-spaced doses after a late or missed dose, refill estimates and taper schedules are calculated only from the information you enter, and they may be wrong if that information is incomplete or incorrect. Check them with your healthcare provider.</p>
+      <p>If you use <em>Scan a label</em>, the App reads the photo automatically and can misread names, doses, numbers or directions. Always compare every filled-in field with your label before saving.</p>
       <p><strong>Never start, stop, skip or change a medication or taper because of something the App shows you</strong> without first speaking to your healthcare provider. In a medical emergency, call 911 or your local emergency number.</p>
 
       <h2>3. Reminders may not always arrive</h2>
@@ -89,6 +90,7 @@ const LEGAL_PAGES = {
       <ul>
         <li><strong>Hosting and anonymous visit counts:</strong> Vercel Inc. (Vercel Web Analytics)</li>
         <li><strong>Fonts:</strong> Cal Sans and Questrial, both licensed under the SIL Open Font License 1.1, delivered by Google Fonts.</li>
+        <li><strong>Label scanning:</strong> Tesseract.js, licensed under the Apache License 2.0, delivered by jsDelivr. It runs entirely on your device.</li>
       </ul>`,
   },
 
@@ -113,6 +115,7 @@ const LEGAL_PAGES = {
         <li><strong>Website hosting (Vercel).</strong> Your browser downloads the App’s files from our hosting provider, Vercel Inc. As with any website, Vercel may automatically process technical information such as your IP address, browser type and the time of the request, for example in server logs used for security and delivery. This does not include anything you enter into the App. See <a href="https://vercel.com/legal/privacy-policy" target="_blank" rel="noopener">Vercel’s privacy policy</a>.</li>
         <li><strong>Fonts (Google Fonts).</strong> The App’s fonts are loaded from Google Fonts, so Google receives your IP address and browser information when the fonts are downloaded. See <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Google’s privacy policy</a>.</li>
         <li><strong>Anonymous visit counts (Vercel Web Analytics).</strong> When you open the App, an anonymous page view is recorded, including the page address, the referring website, your browser, operating system and device type, and your approximate location at country level, derived from your connection. It does not use third-party cookies. Instead, visits are counted with an anonymous code generated from the request, which is discarded after 24 hours. The data isn’t tied to your IP address, and it can’t identify you or follow you across other websites. It never includes anything you enter into the App. We use these totals only to understand how many people use Medsprout and roughly where. See <a href="https://vercel.com/docs/analytics/privacy-policy" target="_blank" rel="noopener">Vercel’s analytics privacy notice</a>.</li>
+        <li><strong>Label reader download (jsDelivr), only if you scan a label.</strong> The first time you use <em>Scan a label</em>, your browser downloads the text-recognition engine (Tesseract.js) and its English language file from the jsDelivr content network, so jsDelivr receives your IP address and browser information for that download. <strong>Your photo is never sent anywhere:</strong> it is read on your device and isn’t saved, not even on your device. Only the text that fills in the form is kept, once you save the medication. See <a href="https://www.jsdelivr.com/terms/privacy-policy" target="_blank" rel="noopener">jsDelivr’s privacy policy</a>.</li>
       </ul>
       <p>We do not use this technical information to identify you, and we do not combine it with anything else.</p>
 
@@ -165,12 +168,13 @@ const LEGAL_PAGES = {
         <tbody>
           <tr><td>Local storage<br><small>medsprout:v1</small></td><td>Saves your medications, schedules, dose history, side-effect notes and settings.</td><td>Until you erase it</td></tr>
           <tr><td>Service worker &amp; cache storage</td><td>Lets the App open and work offline, and shows reminder notifications.</td><td>Until you clear site data or uninstall</td></tr>
+          <tr><td>IndexedDB<br><small>keyval-store</small></td><td>Only if you scan a label: keeps a copy of the label reader’s English language file so later scans are faster. It contains no personal information and never includes your photos.</td><td>Until you clear site data</td></tr>
           <tr><td>Notification permission</td><td>Remembers whether you allowed reminders. Your browser stores this setting.</td><td>Until you change it in your browser</td></tr>
         </tbody>
       </table></div>
 
       <h2>3. Third parties</h2>
-      <p>The App is hosted by Vercel, counts visits anonymously with Vercel Web Analytics (which does not use third-party cookies) and loads its fonts from Google Fonts. Medsprout does not ask any of them to set cookies. Their handling of technical request information is described in <a href="https://vercel.com/legal/privacy-policy" target="_blank" rel="noopener">Vercel’s privacy policy</a> and <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Google’s privacy policy</a>.</p>
+      <p>The App is hosted by Vercel, counts visits anonymously with Vercel Web Analytics (which does not use third-party cookies), loads its fonts from Google Fonts and, only if you scan a label, downloads its label reader from jsDelivr. Medsprout does not ask any of them to set cookies. Their handling of technical request information is described in <a href="https://vercel.com/legal/privacy-policy" target="_blank" rel="noopener">Vercel’s privacy policy</a> and <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Google’s privacy policy</a>.</p>
 
       <h2>4. Managing or clearing this storage</h2>
       <p>You can delete everything Medsprout stores with <em>Settings → Erase all data</em>, or by clearing this site’s data in your browser settings. Doing so permanently deletes your medications and history from this device, so export a backup first if you want to keep them.</p>

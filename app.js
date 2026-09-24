@@ -728,6 +728,16 @@ function viewMedForm(id) {
   const custom = (m.customTimes && m.customTimes.length ? m.customTimes : ['08:00']);
   return `<div class="page-head"><div><h1>${isNew ? 'Add medication' : `Edit ${esc(m.name)}`}</h1><p>Copy the details from your prescription label.</p></div></div>
   <form id="medForm" novalidate>
+    ${isNew ? `<section class="card scan-card" aria-labelledby="scanTitle">
+      <div class="scan-head"><span class="scan-emoji" aria-hidden="true">📷</span><div>
+        <h2 id="scanTitle">Scan a label</h2>
+        <p class="help">Take a photo of the pharmacy label or instruction sheet and Medsprout will fill in what it can read. The photo is read on this device and is never uploaded or saved.</p></div></div>
+      <div class="row">
+        <label class="btn sm">Take photo<input type="file" accept="image/*" capture="environment" data-scan hidden></label>
+        <label class="btn ghost sm">Choose photo<input type="file" accept="image/*" data-scan hidden></label>
+      </div>
+      <div id="scanStatus" class="scan-status" aria-live="polite" hidden></div>
+    </section>` : ''}
     <fieldset><legend>Prescription</legend>
       <div class="field"><label for="f-person">Who is this for?</label>
         <div class="row"><select id="f-person" name="personId" style="flex:1">${personOptions(m.personId)}</select>
@@ -822,6 +832,76 @@ const customTimeRow = v => `<div class="row"><input type="time" name="customTime
 const personOptions = selected => state.people
   .map(p => `<option value="${p.id}" ${p.id === selected ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
 
+/* ---------- Scan a label (reading happens in scan.js, on the device) ---------- */
+async function scanIntoForm(form, file) {
+  const status = $('#scanStatus');
+  const buttons = $$('.scan-card .btn', form);
+  const thumb = URL.createObjectURL(file);
+  const show = html => { status.hidden = false; status.innerHTML = `<img class="scan-thumb" src="${thumb}" alt="Your photo">${html}`; };
+  const progress = (label, frac) => show(`<div class="scan-progress"><p>${label}</p>
+    <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(frac * 100)}"><span style="width:${Math.round(frac * 100)}%"></span></div></div>`);
+  buttons.forEach(b => b.classList.add('disabled'));
+  progress('Getting the label reader ready…', 0);
+  let text = '';
+  try {
+    text = await readLabel(file, (stage, frac) => stage === 'reading'
+      ? progress(`Reading your label… ${Math.round(frac * 100)}%`, frac)
+      : progress('Getting the label reader ready… The first scan downloads it (about 7 MB).', frac));
+  } catch (err) {
+    show(`<div><p><strong>Couldn't load the label reader.</strong></p>
+      <p class="help">Check your internet connection and try again. The first scan needs to download the reader. After that it works faster.</p></div>`);
+    buttons.forEach(b => b.classList.remove('disabled'));
+    URL.revokeObjectURL(thumb);
+    return;
+  }
+
+  const r = parseLabel(text);
+  const rawText = text.trim() ? `<details><summary>Text read from the photo</summary><pre>${esc(text.trim())}</pre></details>` : '';
+  if (r.unreadable) {
+    show(`<div><p><strong>We couldn't read enough of that label.</strong></p>
+      <p class="help">Try again in good light, hold the phone steady, and fill the frame with the label. Or type the details in below.</p>${rawText}</div>`);
+  } else {
+    fillFromScan(form, r);
+    show(`<div><p><strong>Filled in: ${esc(r.found.join(', '))}.</strong></p>
+      <p class="help">Fields filled from the photo are outlined. <strong>Check every one against your label before saving</strong>, because photos can be misread.</p>
+      ${r.warnings.map(w => `<p class="scan-warn">${esc(w)}</p>`).join('')}${rawText}</div>`);
+  }
+  buttons.forEach(b => b.classList.remove('disabled'));
+  // Keep the thumbnail for this view; the object URL is released when the page changes.
+  window.addEventListener('hashchange', () => URL.revokeObjectURL(thumb), { once: true });
+}
+
+/** Put scanned values into the form, outline what changed, and let the form's own listeners update previews. */
+function fillFromScan(form, r) {
+  const set = (name, value) => {
+    if (value === undefined || value === null || value === '') return;
+    const els = $$(`[name="${name}"]`, form);
+    if (!els.length) return;
+    if (els[0].type === 'radio') {
+      const el = els.find(x => x.value === String(value));
+      if (!el) return;
+      el.checked = true;
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+      el.closest('.seg')?.classList.add('scanned');
+      return;
+    }
+    els[0].value = value;
+    els[0].classList.add('scanned');
+    els[0].dispatchEvent(new Event('change', { bubbles: true }));
+  };
+  set('kind', r.kind);
+  set('name', r.name);
+  set('strength', r.strength);
+  set('pillsPerDose', r.pillsPerDose);
+  set('instructions', r.instructions);
+  set('scheduleMode', r.scheduleMode);
+  set('dosesPerDay', r.dosesPerDay);
+  set('intervalHours', r.intervalHours);
+  set('firstDose', r.firstDose);
+  if (r.quantity) { set('pillsPerBottle', r.quantity); set('pillsRemaining', r.quantity); }
+  set('refillsLeft', r.refills);
+}
+
 /** The 20 colour choices, drawn in the medication's current type (capsule or vitamin). */
 function swatchGrid(m) {
   const used = new Set(state.meds.filter(x => x.id !== m.id).map(x => x.color));
@@ -883,6 +963,14 @@ function bindMedForm(id) {
   if (!form) return;
   const isNew = !id || id === 'new';
   const original = isNew ? blankMed() : getMed(id);
+
+  $$('[data-scan]', form).forEach(input => input.addEventListener('change', () => {
+    const file = input.files && input.files[0];
+    input.value = ''; // so the same photo can be picked again
+    if (file) scanIntoForm(form, file);
+  }));
+  // A field filled from a scan loses its highlight once the person edits it.
+  form.addEventListener('input', e => e.target.classList && e.target.classList.remove('scanned'));
 
   // Adding someone from here keeps whatever has been typed into the form.
   $('#addPersonBtn').addEventListener('click', () => personModal(null, person => {
