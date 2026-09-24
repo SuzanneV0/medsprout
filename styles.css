@@ -254,6 +254,38 @@ tr:last-child td { border-bottom: 0; }
 .empty { text-align: center; padding: 36px 16px; border: 1.5px dashed var(--line); border-radius: var(--radius); }
 .empty h2 { margin-bottom: 6px; }
 
+/* ---------- Family members ---------- */
+.switcher {
+  display: flex; gap: 8px; overflow-x: auto; margin: -6px calc(-1 * var(--gutter)) 18px;
+  padding: 4px var(--gutter) 6px; scrollbar-width: none;
+}
+.switcher::-webkit-scrollbar { display: none; }
+.person-tab {
+  flex: 0 0 auto; display: inline-flex; align-items: center; gap: 8px; cursor: pointer;
+  min-height: 40px; padding: 0 14px 0 10px; border-radius: 999px;
+  background: transparent; color: var(--linen); border: 1.5px solid var(--line);
+  font: 600 .92rem var(--font-body);
+}
+.person-tab:hover { border-color: var(--linen); }
+.person-tab.active { background: var(--celadon); color: var(--charcoal); border-color: var(--celadon); }
+.person-tab.add { color: var(--celadon); border-style: dashed; padding: 0 14px; }
+.avatar {
+  flex: 0 0 auto; display: inline-grid; place-content: center;
+  width: 26px; height: 26px; border-radius: 50%;
+  font: 400 .72rem/1 var(--font-head); letter-spacing: .02em;
+}
+.avatar.c0 { background: var(--celadon); color: var(--charcoal); }
+.avatar.c1 { background: var(--caramel); color: var(--linen); }
+.avatar.c2 { background: var(--linen); color: var(--charcoal); }
+.person-tab.active .avatar { box-shadow: 0 0 0 2px var(--charcoal); }
+.who { display: inline-flex; align-items: center; gap: 6px; font-size: .85rem; color: var(--muted); }
+.who .avatar { width: 22px; height: 22px; font-size: .64rem; }
+.people-list { list-style: none; padding: 0; margin: 0 0 14px; display: grid; gap: 8px; }
+.people-list li { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 0; border-bottom: 1px dashed var(--line); }
+.people-list .avatar { width: 34px; height: 34px; font-size: .85rem; }
+.people-name { flex: 1 1 120px; display: grid; }
+.people-name small { font-size: .8rem; }
+
 /* ---------- Notice (local-storage disclaimer, policy summaries) ---------- */
 .notice {
   background: rgba(161, 205, 168, .12); border-left: 4px solid var(--celadon);
@@ -315,3 +347,4 @@ dialog h2 { margin-bottom: 12px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+.people-actions { display: flex; gap: 8px; }

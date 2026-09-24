@@ -36,6 +36,8 @@ const atMin = (iso, k) => { const d = new Date(iso); return daysBetween(parseDay
 
 /* ---------- state ---------- */
 const defaults = () => ({
+  people: [{ id: 'me', name: 'Me', color: 0 }], // family members; every med belongs to one
+  viewing: 'all',   // 'all' or a person id — which family member the screens show
   meds: [],
   doses: {},        // { 'YYYY-MM-DD': { medId: { slotIdx: { status, at, pills } } } }
   sideEffects: [],
@@ -43,6 +45,21 @@ const defaults = () => ({
   snoozes: {},      // { slotKey: timestamp }
   settings: { graceMin: 30, refillWindowDays: 3, notifications: false },
 });
+
+/** Fill in anything missing from older saved data or backups (before family members existed). */
+function upgrade(s) {
+  const d = defaults();
+  s = { ...d, ...s, settings: { ...d.settings, ...s.settings } };
+  if (!Array.isArray(s.people) || !s.people.length) s.people = d.people;
+  const first = s.people[0].id;
+  const known = id => s.people.some(p => p.id === id);
+  s.meds.forEach(m => { if (!known(m.personId)) m.personId = first; });
+  s.sideEffects.forEach(e => {
+    if (!known(e.personId)) e.personId = (s.meds.find(m => m.id === e.medId) || {}).personId || first;
+  });
+  if (s.viewing !== 'all' && !known(s.viewing)) s.viewing = 'all';
+  return s;
+}
 
 let state = load();
 function load() {
@@ -52,10 +69,7 @@ function load() {
       localStorage.setItem(STORE_KEY, raw);
       localStorage.removeItem(LEGACY_STORE_KEY);
     }
-    if (raw) {
-      const s = JSON.parse(raw), d = defaults();
-      return { ...d, ...s, settings: { ...d.settings, ...s.settings } };
-    }
+    if (raw) return upgrade(JSON.parse(raw));
   } catch (e) { /* fall through */ }
   return defaults();
 }
@@ -64,6 +78,25 @@ function save() {
   catch (e) { toast('Could not save — storage is unavailable in this browser.', 'danger'); }
 }
 const getMed = id => state.meds.find(m => m.id === id);
+
+/* ---------- family members ---------- */
+const getPerson = id => state.people.find(p => p.id === id);
+const isFamily = () => state.people.length > 1;
+/** Medications for whoever is selected in the switcher. */
+const visibleMeds = () => state.viewing === 'all' ? state.meds : state.meds.filter(m => m.personId === state.viewing);
+const visiblePeople = () => state.viewing === 'all' ? state.people : state.people.filter(p => p.id === state.viewing);
+/** "Mom · Amoxicillin" once there's more than one person, otherwise just "Amoxicillin". */
+const medLabel = m => { const p = getPerson(m.personId); return isFamily() && p ? `${p.name} · ${m.name}` : m.name; };
+/** "Mary Smith" → "MS", "Mom" → "Mo", so one-word names that share a first letter still look different. */
+const initials = name => {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return '?';
+  if (words.length > 1) return (words[0][0] + words[1][0]).toUpperCase();
+  return words[0][0].toUpperCase() + (words[0][1] || '').toLowerCase();
+};
+const avatar = p => p ? `<span class="avatar c${p.color % 3}" aria-hidden="true">${esc(initials(p.name))}</span>` : '';
+/** Small "who" tag for cards — only shown when there's more than one person. */
+const whoTag = m => { const p = getPerson(m.personId); return isFamily() && p ? `<span class="who">${avatar(p)}${esc(p.name)}</span>` : ''; };
 
 /* =========================================================
    Scheduling
@@ -169,8 +202,8 @@ function daySchedule(med, k) {
   return out;
 }
 
-function allSlots(k) {
-  return state.meds.flatMap(m => daySchedule(m, k)).sort((a, b) => a.time - b.time);
+function allSlots(k, meds = state.meds) {
+  return meds.flatMap(m => daySchedule(m, k)).sort((a, b) => a.time - b.time);
 }
 
 function slotStatus(slot) {
@@ -233,7 +266,7 @@ function takeDose(key) {
   delete state.snoozes[key];
   save();
   const next = daySchedule(med, slot.k).find(s => s.idx > slot.idx);
-  let msg = `${med.name} taken ✓`;
+  let msg = `${medLabel(med)} taken ✓`;
   if (late > num(state.settings.graceMin, 30) && next && next.shifted) msg += ` Next dose moved to ${fmtMin(next.time)}.`;
   toast(msg, 'success');
   render();
@@ -245,7 +278,7 @@ function skipDose(key) {
   setRec(slot.k, slot.med.id, slot.idx, { status: 'skipped', at: new Date().toISOString(), pills: 0 });
   delete state.snoozes[key];
   save();
-  toast(`${slot.med.name} dose skipped.`);
+  toast(`${medLabel(slot.med)} dose skipped.`);
   render();
 }
 
@@ -305,22 +338,22 @@ function tick() {
     if (!slot.rec && rem.enabled) {
       const lead = num(rem.leadMin);
       if (lead > 0 && n >= slot.time - lead && n < slot.time)
-        notifyOnce(`${slot.key}|pre`, `${med.name} in ${lead} min`, `${pillsTxt} Due at ${fmtMin(slot.time)}.`, '', slot.key);
+        notifyOnce(`${slot.key}|pre`, `${medLabel(med)} in ${lead} min`, `${pillsTxt} Due at ${fmtMin(slot.time)}.`, '', slot.key);
       if (st === 'due')
-        notifyOnce(`${slot.key}|due|${Math.round(slot.time)}`, `Time to take ${med.name}`, `${pillsTxt} ${med.instructions ? med.instructions : ''}`.trim(), '', slot.key);
+        notifyOnce(`${slot.key}|due|${Math.round(slot.time)}`, `Time to take ${medLabel(med)}`, `${pillsTxt} ${med.instructions ? med.instructions : ''}`.trim(), '', slot.key);
     }
     if (st === 'missed' && !slot.rec)
-      notifyOnce(`${slot.key}|missed|${Math.round(slot.time)}`, `Missed dose: ${med.name}`, `It was due at ${fmtMin(slot.time)}. Take it now or skip it and your next dose will be re-spaced.`, 'danger', slot.key);
+      notifyOnce(`${slot.key}|missed|${Math.round(slot.time)}`, `Missed dose: ${medLabel(med)}`, `It was due at ${fmtMin(slot.time)}. Take it now or skip it and your next dose will be re-spaced.`, 'danger', slot.key);
     const sz = state.snoozes[slot.key];
     if (sz && now >= sz && !slot.rec) {
       delete state.snoozes[slot.key];
-      notifyOnce(`${slot.key}|snooze|${sz}`, `Reminder: ${med.name}`, pillsTxt, st === 'missed' ? 'danger' : '', slot.key);
+      notifyOnce(`${slot.key}|snooze|${sz}`, `Reminder: ${medLabel(med)}`, pillsTxt, st === 'missed' ? 'danger' : '', slot.key);
     }
   }
   for (const med of state.meds) {
     const r = refillStatus(med);
-    if (r.level === 'out') notifyOnce(`refill-out|${med.id}|${k}`, `${med.name} needs a refill`, `You don't have enough pills for today's doses. Refill your prescription.`, 'danger');
-    else if (r.level === 'soon') notifyOnce(`refill-soon|${med.id}|${k}`, `Refill ${med.name} soon`, `About ${r.days} day${r.days === 1 ? '' : 's'} left — runs out ${fmtDate(r.runOut)}.`, 'warn');
+    if (r.level === 'out') notifyOnce(`refill-out|${med.id}|${k}`, `${medLabel(med)} needs a refill`, `You don't have enough pills for today's doses. Refill your prescription.`, 'danger');
+    else if (r.level === 'soon') notifyOnce(`refill-soon|${med.id}|${k}`, `Refill ${medLabel(med)} soon`, `About ${r.days} day${r.days === 1 ? '' : 's'} left — runs out ${fmtDate(r.runOut)}.`, 'warn');
   }
   // prune old notification keys (> 3 days)
   const cutoff = now - 3 * 86400000;
@@ -380,16 +413,76 @@ document.addEventListener('click', e => {
   else if (act === 'undo') undoDose(key);
   else if (act === 'snooze') snoozeDose(key);
   else if (act === 'refill') refillModal(id);
-  else if (act === 'pause') { const m = getMed(id); m.active = !m.active; save(); toast(m.active ? `${m.name} resumed.` : `${m.name} paused.`); render(); }
+  else if (act === 'pause') { const m = getMed(id); m.active = !m.active; save(); toast(m.active ? `${medLabel(m)} resumed.` : `${medLabel(m)} paused.`); render(); }
   else if (act === 'delete-med') {
     const m = getMed(id);
-    confirmBox('Delete medication?', `This removes <strong>${esc(m.name)}</strong> and its schedule. Side-effect notes stay in your log.`, 'Delete', true, () => {
-      state.meds = state.meds.filter(x => x.id !== id); save(); toast(`${m.name} deleted.`); render();
+    confirmBox('Delete medication?', `This removes <strong>${esc(medLabel(m))}</strong> and its schedule. Side-effect notes stay in your log.`, 'Delete', true, () => {
+      state.meds = state.meds.filter(x => x.id !== id); save(); toast(`${medLabel(m)} deleted.`); render();
     });
   }
   else if (act === 'delete-effect') { state.sideEffects = state.sideEffects.filter(x => x.id !== id); save(); render(); }
   else if (act === 'notify') enableNotifications();
+  else if (act === 'view-person') { state.viewing = id; save(); render(); }
+  else if (act === 'add-person') personModal();
+  else if (act === 'rename-person') personModal(id);
+  else if (act === 'delete-person') deletePerson(id);
 });
+
+/* ---------- family members: switcher, add/rename, delete ---------- */
+function personSwitcher() {
+  if (!isFamily()) return '';
+  const btn = (id, label, extra = '') => `<button class="person-tab ${state.viewing === id ? 'active' : ''}" data-act="view-person" data-id="${id}" aria-pressed="${state.viewing === id}">${extra}${label}</button>`;
+  return `<div class="switcher" role="group" aria-label="Show medications for">
+    ${btn('all', 'Everyone')}
+    ${state.people.map(p => btn(p.id, esc(p.name), avatar(p))).join('')}
+    <button class="person-tab add" data-act="add-person" aria-label="Add family member">+ Add</button>
+  </div>`;
+}
+
+/** Add a family member (no id) or rename one. `onDone` receives the person, e.g. to select them in a form. */
+function personModal(id, onDone) {
+  const p = id && getPerson(id);
+  openModal(`<form><h2>${p ? `Rename ${esc(p.name)}` : 'Add a family member'}</h2>
+    <div class="field"><label for="p-name">Name</label>
+      <input id="p-name" name="name" required maxlength="40" value="${p ? esc(p.name) : ''}" placeholder="e.g. Mom, Liam, Grandpa" autocomplete="off"></div>
+    ${p ? '' : '<p class="help">Their medications and reminders will be kept separately, and everything stays on this device.</p>'}
+    <div class="row"><button class="btn">${p ? 'Save' : 'Add'}</button><button type="button" class="btn ghost" data-close>Cancel</button></div></form>`,
+  fd => {
+    const name = String(fd.get('name') || '').trim();
+    if (!name) return false;
+    if (state.people.some(x => x.id !== id && x.name.toLowerCase() === name.toLowerCase())) { toast(`There's already someone called ${name}.`, 'warn'); return false; }
+    let person = p;
+    if (p) p.name = name;
+    else {
+      person = { id: uid(), name, color: state.people.length };
+      state.people.push(person);
+    }
+    save();
+    toast(p ? 'Name updated.' : `${name} added.`, 'success');
+    if (onDone) onDone(person); else render();
+  });
+  setTimeout(() => $('#p-name', modal) && $('#p-name', modal).focus(), 50);
+}
+
+function deletePerson(id) {
+  const p = getPerson(id);
+  if (!p || state.people.length < 2) return;
+  const meds = state.meds.filter(m => m.personId === id);
+  confirmBox(`Remove ${p.name}?`,
+    meds.length
+      ? `This also deletes <strong>${meds.length} medication${meds.length === 1 ? '' : 's'}</strong> (${meds.map(m => esc(m.name)).join(', ')}), their dose history and their side-effect notes from this device. This can't be undone.`
+      : `${esc(p.name)} has no medications. Their side-effect notes will also be removed.`,
+    `Remove ${p.name}`, true, () => {
+      const ids = new Set(meds.map(m => m.id));
+      state.meds = state.meds.filter(m => !ids.has(m.id));
+      state.sideEffects = state.sideEffects.filter(e => e.personId !== id);
+      for (const k in state.doses) for (const mid of ids) delete state.doses[k][mid];
+      for (const key in state.snoozes) if (ids.has(key.split('|')[1])) delete state.snoozes[key];
+      state.people = state.people.filter(x => x.id !== id);
+      if (state.viewing === id) state.viewing = 'all';
+      save(); toast(`${p.name} removed.`); render();
+    });
+}
 
 /* =========================================================
    Views
@@ -404,7 +497,8 @@ function render() {
   $$('.menu a').forEach(a => a.classList.toggle('active', a.dataset.nav === view));
   const app = $('#app');
   const views = { today: viewToday, meds: viewMeds, med: () => viewMedForm(arg), tapers: viewTapers, effects: viewEffects, history: viewHistory, settings: viewSettings };
-  app.innerHTML = LEGAL_PAGES[view] ? viewLegal(view) : (views[view] || viewToday)();
+  const withSwitcher = ['today', 'meds', 'tapers', 'effects', 'history'].includes(view) || !views[view] && !LEGAL_PAGES[view];
+  app.innerHTML = LEGAL_PAGES[view] ? viewLegal(view) : (withSwitcher ? personSwitcher() : '') + (views[view] || viewToday)();
   document.title = LEGAL_PAGES[view] ? `${LEGAL_PAGES[view].title} · Medsprout` : 'Medsprout';
   if (view === 'med') bindMedForm(arg);
   if (view === 'effects') bindEffectForm();
@@ -414,12 +508,15 @@ function render() {
 /* ---------- Today ---------- */
 function viewToday() {
   const k = dayKey();
-  if (!state.meds.length) {
-    return `<div class="page-head"><div><h1>Today</h1><p>${fmtDate(k, { weekday: 'long', month: 'long', day: 'numeric' })}</p></div></div>
-      <div class="empty"><h2>No medications yet</h2><p class="muted">Add your first prescription using the instructions on its label.</p>
+  const meds = visibleMeds();
+  const who = state.viewing !== 'all' && isFamily() ? getPerson(state.viewing).name : '';
+  const dateLine = fmtDate(k, { weekday: 'long', month: 'long', day: 'numeric' }) + (who ? ` · ${esc(who)}` : '');
+  if (!meds.length) {
+    return `<div class="page-head"><div><h1>Today</h1><p>${dateLine}</p></div></div>
+      <div class="empty"><h2>${who ? `No medications for ${esc(who)} yet` : 'No medications yet'}</h2><p class="muted">Add your first prescription using the instructions on its label.</p>
       <a class="btn" href="#med/new">Add medication</a></div>`;
   }
-  const slots = allSlots(k);
+  const slots = allSlots(k, meds);
   const statuses = slots.map(s => ({ s, st: slotStatus(s) }));
   const done = statuses.filter(x => x.st === 'taken').length;
   const counted = statuses.filter(x => x.st !== 'skipped').length;
@@ -430,25 +527,25 @@ function viewToday() {
     const next = daySchedule(s.med, k).find(o => o.idx > s.idx && !o.rec);
     const nearNext = next && next.base - nowMin() < gapMin(s.med) / 2;
     alerts.push(`<div class="alert missed" role="alert"><div class="alert-body">
-      <strong>Missed: ${esc(s.med.name)}</strong>
+      <strong>Missed: ${esc(medLabel(s.med))}</strong>
       <p>${fmtPills(s.pills)} was due at ${fmtMin(s.time)}.${nearNext ? ` Your next dose is at ${fmtMin(next.base)} — many labels say to skip a missed dose if the next one is close. Check your label or ask your pharmacist.` : ' Take it now and your next dose will be re-spaced automatically.'}</p></div>
       <div class="row"><button class="btn take sm" data-act="take" data-key="${s.key}">Take now</button>
       <button class="btn ghost sm" data-act="skip" data-key="${s.key}">Skip</button></div></div>`);
   });
-  state.meds.forEach(m => {
+  meds.forEach(m => {
     const r = refillStatus(m);
-    if (r.level === 'out') alerts.push(`<div class="alert out" role="alert"><div class="alert-body"><strong>Prescription not refilled: ${esc(m.name)}</strong>
+    if (r.level === 'out') alerts.push(`<div class="alert out" role="alert"><div class="alert-body"><strong>Prescription not refilled: ${esc(medLabel(m))}</strong>
       <p>${num(m.pillsRemaining) <= 0 ? 'You are out of pills.' : `Only ${fmtPills(num(m.pillsRemaining))} left — not enough for today.`} Refill now so you don't miss doses.</p></div>
       <button class="btn sm" data-act="refill" data-id="${m.id}">Log refill</button></div>`);
-    else if (r.level === 'soon') alerts.push(`<div class="alert soon"><div class="alert-body"><strong>Refill soon: ${esc(m.name)}</strong>
+    else if (r.level === 'soon') alerts.push(`<div class="alert soon"><div class="alert-body"><strong>Refill soon: ${esc(medLabel(m))}</strong>
       <p>About ${r.days} day${r.days === 1 ? '' : 's'} of pills left — runs out ${fmtDate(r.runOut)}. Order your refill now.</p></div>
       <button class="btn sm" data-act="refill" data-id="${m.id}">Log refill</button></div>`);
   });
 
   const cards = statuses.map(({ s, st }) => doseCard(s, st)).join('');
-  const tomorrow = allSlots(dayKey(addDays(new Date(), 1)));
+  const tomorrow = allSlots(dayKey(addDays(new Date(), 1)), meds);
 
-  return `<div class="page-head"><div><h1>Today</h1><p>${fmtDate(k, { weekday: 'long', month: 'long', day: 'numeric' })}</p></div>
+  return `<div class="page-head"><div><h1>Today</h1><p>${dateLine}</p></div>
     ${notifBanner()}</div>
     ${alerts.length ? `<div class="alerts">${alerts.join('')}</div>` : ''}
     <div class="card summary">
@@ -458,8 +555,8 @@ function viewToday() {
     <div class="section"><h2>Schedule</h2>
       ${slots.length ? `<div class="timeline">${cards}</div>` : '<p class="muted">No doses scheduled today.</p>'}
     </div>
-    ${tomorrow.length ? `<div class="section"><h2>Tomorrow</h2><div class="row">${tomorrow.map(s => `<span class="time-chip">${fmtMin(s.time)} · ${esc(s.med.name)} × ${fmtNum(s.pills)}</span>`).join('')}</div></div>` : ''}
-    <div class="section"><h2>This week</h2>${weekStrip()}</div>`;
+    ${tomorrow.length ? `<div class="section"><h2>Tomorrow</h2><div class="row">${tomorrow.map(s => `<span class="time-chip">${fmtMin(s.time)} · ${esc(medLabel(s.med))} × ${fmtNum(s.pills)}</span>`).join('')}</div></div>` : ''}
+    <div class="section"><h2>This week</h2>${weekStrip(meds)}</div>`;
 }
 
 function doseCard(s, st) {
@@ -479,18 +576,18 @@ function doseCard(s, st) {
   return `<article class="dose ${st}">
     <div class="dose-time">${fmtMin(s.time)}${s.shifted ? `<s>${fmtMin(s.base)}</s><span class="moved">re-spaced</span>` : ''}</div>
     <div>
-      <div class="row"><h3>${esc(m.name)}</h3><span class="chip ${st}">${label}</span>${taperActive(m, s.k) ? '<span class="chip taper">Taper</span>' : ''}</div>
+      <div class="row"><h3>${esc(m.name)}</h3>${whoTag(m)}<span class="chip ${st}">${label}</span>${taperActive(m, s.k) ? '<span class="chip taper">Taper</span>' : ''}</div>
       <p class="meta">${fmtPills(s.pills)}${m.strength ? ` · ${esc(m.strength)}` : ''}${m.instructions ? ` · ${esc(m.instructions)}` : ''}</p>
       <div class="actions">${actions}</div>
     </div></article>`;
 }
 
-function weekStrip() {
+function weekStrip(meds = state.meds) {
   const today = new Date();
   const cells = [];
   for (let i = 6; i >= 0; i--) {
     const d = addDays(today, -i), k = dayKey(d);
-    const slots = allSlots(k).map(s => slotStatus(s)).filter(st => st !== 'skipped' && (i > 0 || st !== 'upcoming'));
+    const slots = allSlots(k, meds).map(s => slotStatus(s)).filter(st => st !== 'skipped' && (i > 0 || st !== 'upcoming'));
     const taken = slots.filter(st => st === 'taken').length;
     const cls = !slots.length ? '' : taken === slots.length ? 'full' : 'partial';
     cells.push(`<div class="d">${d.toLocaleDateString(undefined, { weekday: 'narrow' })}
@@ -517,9 +614,12 @@ async function enableNotifications() {
 
 /* ---------- Medications list ---------- */
 function viewMeds() {
-  const head = `<div class="page-head"><div><h1>Medications</h1><p>${state.meds.length} on file</p></div><a class="btn" href="#med/new">+ Add medication</a></div>`;
-  if (!state.meds.length) return head + `<div class="empty"><h2>Nothing here yet</h2><p class="muted">Add a prescription to start tracking.</p></div>`;
-  const cards = state.meds.map(m => {
+  const meds = visibleMeds();
+  const who = state.viewing !== 'all' && isFamily() ? getPerson(state.viewing).name : '';
+  const addFamily = isFamily() ? '' : `<p class="muted" style="margin:-6px 0 16px">Managing medications for someone else? <button class="linkish" data-act="add-person">Add a family member</button></p>`;
+  const head = `<div class="page-head"><div><h1>Medications</h1><p>${meds.length} on file${who ? ` for ${esc(who)}` : ''}</p></div><a class="btn" href="#med/new">+ Add medication</a></div>${addFamily}`;
+  if (!meds.length) return head + `<div class="empty"><h2>Nothing here yet</h2><p class="muted">Add a prescription to start tracking.</p></div>`;
+  const cards = meds.map(m => {
     const r = refillStatus(m);
     const times = baseTimes(m);
     const bottle = Math.max(num(m.pillsPerBottle), num(m.pillsRemaining), 1);
@@ -533,7 +633,7 @@ function viewMeds() {
       : r.days === 0 ? 'Not enough for today' : `${r.days} day${r.days === 1 ? '' : 's'} left · runs out ${fmtDate(r.runOut)}`;
     const refills = (m.refills || []).slice().reverse();
     return `<article class="card med-card ${m.active ? '' : 'paused'} ${flashMedId === m.id ? 'new-flash' : ''}">
-      <div class="row"><h3>${esc(m.name)}</h3>${chip}${m.taper && m.taper.enabled ? '<span class="chip taper">Taper</span>' : ''}</div>
+      <div class="row"><h3>${esc(m.name)}</h3>${whoTag(m)}${chip}${m.taper && m.taper.enabled ? '<span class="chip taper">Taper</span>' : ''}</div>
       <p class="sub">${esc(m.strength || '')}${m.strength ? ' · ' : ''}${fmtPills(num(m.pillsPerDose, 1))} × ${times.length} a day · ${scheduleLabel(m)}</p>
       <div class="row">${times.map(t => `<span class="time-chip">${fmtMin(t)}</span>`).join('')}</div>
       ${m.instructions ? `<div class="instr">📋 ${esc(m.instructions)}</div>` : ''}
@@ -563,7 +663,7 @@ function scheduleLabel(m) {
 
 function refillModal(id) {
   const m = getMed(id);
-  openModal(`<form><h2>Log refill · ${esc(m.name)}</h2>
+  openModal(`<form><h2>Log refill · ${esc(medLabel(m))}</h2>
     <div class="field"><label for="rf-date">Date picked up</label><input id="rf-date" name="date" type="date" value="${dayKey()}" required></div>
     <div class="field"><label for="rf-pills">Pills in this bottle</label><input id="rf-pills" name="pills" type="number" min="0.5" step="0.5" value="${num(m.pillsPerBottle) || ''}" required></div>
     <div class="field"><label for="rf-note">Note <span class="help">(optional — pharmacy, Rx number…)</span></label><input id="rf-note" name="note" maxlength="120"></div>
@@ -581,7 +681,7 @@ function refillModal(id) {
     delete state.notified[`refill-out|${m.id}|${k}`];
     delete state.notified[`refill-soon|${m.id}|${k}`];
     save();
-    toast(`Refill logged — ${m.name} now has ${fmtPills(m.pillsRemaining)}.`, 'success');
+    toast(`Refill logged — ${medLabel(m)} now has ${fmtPills(m.pillsRemaining)}.`, 'success');
     render();
   });
 }
@@ -595,6 +695,7 @@ function blankMed() {
     reminder: { enabled: true, leadMin: 0 },
     taper: { enabled: false, startDate: dayKey(), startDaily: 1, reduceBy: 1, everyN: 1, unit: 'weeks', everyDays: 7 },
     refills: [],
+    personId: state.viewing !== 'all' ? state.viewing : state.people[0].id,
   };
 }
 
@@ -608,6 +709,9 @@ function viewMedForm(id) {
   return `<div class="page-head"><div><h1>${isNew ? 'Add medication' : `Edit ${esc(m.name)}`}</h1><p>Copy the details from your prescription label.</p></div></div>
   <form id="medForm" novalidate>
     <fieldset><legend>Prescription</legend>
+      <div class="field"><label for="f-person">Who is this for?</label>
+        <div class="row"><select id="f-person" name="personId" style="flex:1">${personOptions(m.personId)}</select>
+        <button type="button" class="btn ghost sm" id="addPersonBtn">+ Add person</button></div></div>
       <div class="field"><label for="f-name">Medication name *</label><input id="f-name" name="name" required value="${esc(m.name)}" placeholder="e.g. Amoxicillin" autocomplete="off"></div>
       <div class="inline-fields">
         <div class="field"><label for="f-strength">Strength</label><input id="f-strength" name="strength" value="${esc(m.strength)}" placeholder="e.g. 500 mg"></div>
@@ -687,6 +791,9 @@ function viewMedForm(id) {
 
 const customTimeRow = v => `<div class="row"><input type="time" name="customTime" value="${esc(v)}" style="flex:1"><button type="button" class="btn ghost sm" data-rm-time aria-label="Remove time">Remove</button></div>`;
 
+const personOptions = selected => state.people
+  .map(p => `<option value="${p.id}" ${p.id === selected ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
+
 function readMedForm(form, base) {
   const fd = new FormData(form);
   const unit = fd.get('taperUnit') || 'weeks';
@@ -695,6 +802,7 @@ function readMedForm(form, base) {
   const mode = fd.get('scheduleMode') || 'even';
   return {
     ...base,
+    personId: getPerson(fd.get('personId')) ? fd.get('personId') : base.personId,
     name: String(fd.get('name') || '').trim(),
     strength: String(fd.get('strength') || '').trim(),
     instructions: String(fd.get('instructions') || '').trim(),
@@ -737,6 +845,11 @@ function bindMedForm(id) {
   if (!form) return;
   const isNew = !id || id === 'new';
   const original = isNew ? blankMed() : getMed(id);
+
+  // Adding someone from here keeps whatever has been typed into the form.
+  $('#addPersonBtn').addEventListener('click', () => personModal(null, person => {
+    $('#f-person').innerHTML = personOptions(person.id);
+  }));
 
   const syncMode = () => {
     const mode = (new FormData(form)).get('scheduleMode');
@@ -795,6 +908,7 @@ function bindMedForm(id) {
       m.startDate = dayKey();
       m.refills = [];
       state.meds.push(m);
+      if (state.viewing !== 'all' && state.viewing !== m.personId) state.viewing = m.personId;
       flashMedId = m.id;
       toast(`${m.name} added — reminders scheduled.`, 'success');
     } else {
@@ -820,7 +934,7 @@ function taperTable(m, steps, today) {
 }
 
 function viewTapers() {
-  const tapering = state.meds.filter(m => m.taper && m.taper.enabled);
+  const tapering = visibleMeds().filter(m => m.taper && m.taper.enabled);
   const head = `<div class="page-head"><div><h1>Taper schedules</h1><p>Step-downs are built into your daily reminders automatically.</p></div></div>`;
   if (!tapering.length) return head + `<div class="empty"><h2>No tapers set up</h2><p class="muted">Edit a medication and turn on “This medication needs a slow taper”.</p><a class="btn" href="#meds">Go to medications</a></div>`;
   const today = dayKey();
@@ -830,7 +944,7 @@ function viewTapers() {
     const t = m.taper;
     const notStarted = today < t.startDate;
     const next = steps.find(s => s.start > today);
-    return `<article class="card"><div class="row"><h2 style="margin:0">${esc(m.name)}</h2><span class="chip taper">Reduce ${fmtNum(t.reduceBy)} every ${t.everyN} ${t.unit === 'days' ? (t.everyN === 1 ? 'day' : 'days') : (t.everyN === 1 ? 'week' : 'weeks')}</span></div>
+    return `<article class="card"><div class="row"><h2 style="margin:0">${esc(m.name)}</h2>${whoTag(m)}<span class="chip taper">Reduce ${fmtNum(t.reduceBy)} every ${t.everyN} ${t.unit === 'days' ? (t.everyN === 1 ? 'day' : 'days') : (t.everyN === 1 ? 'week' : 'weeks')}</span></div>
       <p class="muted" style="margin:8px 0 14px">${notStarted ? `Starts ${fmtDate(t.startDate)}.` : cur ? `Now: <strong style="color:var(--linen)">${fmtPills(cur.daily)} a day</strong> (step ${cur.step} of ${steps.length - 1}).` : 'Taper complete.'}
       ${next ? ` Next change ${fmtDate(next.start)} → ${next.daily > 0 ? fmtPills(next.daily) + ' a day' : 'stop'}.` : ''}</p>
       ${taperTable(m, steps, today)}
@@ -846,14 +960,23 @@ const SEV = ['', 'Very mild', 'Mild', 'Moderate', 'Strong', 'Severe'];
 function viewEffects() {
   const now = new Date();
   const local = `${dayKey(now)}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
-  const filter = sessionFilter;
-  const list = state.sideEffects.filter(e => !filter || e.medId === filter).sort((a, b) => b.at.localeCompare(a.at));
+  const meds = visibleMeds(), people = visiblePeople();
+  const filter = meds.some(m => m.id === sessionFilter) ? sessionFilter : '';
+  const list = state.sideEffects
+    .filter(e => people.some(p => p.id === e.personId) && (!filter || e.medId === filter))
+    .sort((a, b) => b.at.localeCompare(a.at));
+  // Options are grouped by person when there's a family; "general" notes still belong to someone.
+  const medOptions = people.map(p => {
+    const opts = meds.filter(m => m.personId === p.id).map(m => `<option value="${m.id}">${esc(m.name)}</option>`).join('')
+      + `<option value="general:${p.id}">Not sure / general</option>`;
+    return isFamily() ? `<optgroup label="${esc(p.name)}">${opts}</optgroup>` : opts;
+  }).join('');
   return `<div class="page-head"><div><h1>Side effects</h1><p>Keep notes to share with your doctor or pharmacist.</p></div></div>
   <div class="grid-2">
     <form class="card" id="effectForm">
       <h2>Log a side effect</h2>
-      <div class="field"><label for="e-med">Medication</label><select id="e-med" name="medId">
-        ${state.meds.map(m => `<option value="${m.id}">${esc(m.name)}</option>`).join('')}<option value="">Not sure / general</option></select></div>
+      <div class="field"><label for="e-med">${isFamily() ? 'Who and which medication' : 'Medication'}</label><select id="e-med" name="medId">
+        ${medOptions}</select></div>
       <div class="field"><label for="e-sym">What are you feeling?</label><input id="e-sym" name="symptom" list="effectList" required placeholder="e.g. Nausea">
         <datalist id="effectList">${COMMON_EFFECTS.map(x => `<option value="${x}">`).join('')}</datalist></div>
       <div class="field"><label for="e-sev">How strong? <span class="help" id="sevLabel">Moderate</span></label><input id="e-sev" name="severity" type="range" min="1" max="5" value="3"></div>
@@ -864,12 +987,12 @@ function viewEffects() {
     </form>
     <div>
       <div class="row" style="margin-bottom:12px"><label for="e-filter" class="help">Show</label>
-        <select id="e-filter" style="flex:1"><option value="">All medications</option>${state.meds.map(m => `<option value="${m.id}" ${filter === m.id ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}</select></div>
+        <select id="e-filter" style="flex:1"><option value="">All medications</option>${meds.map(m => `<option value="${m.id}" ${filter === m.id ? 'selected' : ''}>${esc(medLabel(m))}</option>`).join('')}</select></div>
       ${list.length ? `<div class="grid">${list.map(e => {
         const m = getMed(e.medId);
         return `<article class="card effect"><div class="top"><h3>${esc(e.symptom)}</h3>
           <span class="sev" title="${SEV[e.severity]}">${[1, 2, 3, 4, 5].map(i => `<i class="${i <= e.severity ? 'on' : ''}"></i>`).join('')} <small>&nbsp;${SEV[e.severity]}</small></span></div>
-          <small>${new Date(e.at).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })} · ${m ? esc(m.name) : esc(e.medName || 'General')}</small>
+          <small>${new Date(e.at).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })} · ${m ? esc(medLabel(m)) : esc([isFamily() && getPerson(e.personId) ? getPerson(e.personId).name : '', e.medName || 'General'].filter(Boolean).join(' · '))}</small>
           ${e.notes ? `<p class="note">${esc(e.notes)}</p>` : ''}
           <div><button class="linkish" data-act="delete-effect" data-id="${e.id}">Delete</button></div></article>`;
       }).join('')}</div>` : '<div class="empty"><p class="muted" style="margin:0">No side effects logged.</p></div>'}
@@ -887,9 +1010,12 @@ function bindEffectForm() {
     const fd = new FormData(form);
     const symptom = String(fd.get('symptom') || '').trim();
     if (!symptom) return;
-    const med = getMed(fd.get('medId'));
+    const choice = String(fd.get('medId') || '');
+    const med = getMed(choice);
+    const personId = med ? med.personId : choice.replace(/^general:/, '');
+    if (!getPerson(personId)) return;
     state.sideEffects.push({
-      id: uid(), medId: fd.get('medId') || '', medName: med ? med.name : '',
+      id: uid(), personId, medId: med ? med.id : '', medName: med ? med.name : '',
       symptom, severity: +fd.get('severity'), at: new Date(fd.get('at')).toISOString(),
       notes: String(fd.get('notes') || '').trim(),
     });
@@ -904,11 +1030,11 @@ function viewHistory() {
   const rows = [];
   for (let i = 0; i < 14; i++) {
     const k = dayKey(addDays(new Date(), -i));
-    const slots = allSlots(k).map(s => ({ s, st: slotStatus(s) })).filter(x => i > 0 || x.st !== 'upcoming');
+    const slots = allSlots(k, visibleMeds()).map(s => ({ s, st: slotStatus(s) })).filter(x => i > 0 || x.st !== 'upcoming');
     if (!slots.length) continue;
     rows.push(`<article class="card"><div class="row"><h3 style="margin:0">${i === 0 ? 'Today' : i === 1 ? 'Yesterday' : fmtDate(k)}</h3>
       <span class="spacer"></span><small>${slots.filter(x => x.st === 'taken').length} of ${slots.filter(x => x.st !== 'skipped').length} taken</small></div>
-      <ul class="mini-list">${slots.map(({ s, st }) => `<li><span>${fmtMin(s.time)} · ${esc(s.med.name)} × ${fmtNum(s.pills)}</span>
+      <ul class="mini-list">${slots.map(({ s, st }) => `<li><span>${fmtMin(s.time)} · ${esc(medLabel(s.med))} × ${fmtNum(s.pills)}</span>
         <span>${st === 'taken' ? `<span class="chip taken">Taken ${new Date(s.rec.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>` : `<span class="chip ${st}">${st[0].toUpperCase() + st.slice(1)}</span>`}
         ${s.rec ? ` <button class="linkish" data-act="undo" data-key="${s.key}">Undo</button>` : i > 0 ? ` <button class="linkish" data-act="take" data-key="${s.key}">Log as taken</button>` : ''}</span></li>`).join('')}</ul></article>`);
   }
@@ -934,6 +1060,16 @@ function viewSettings() {
   const perm = !('Notification' in window) ? 'Not supported in this browser' : Notification.permission === 'granted' ? (s.notifications ? 'On' : 'Allowed, but turned off') : Notification.permission === 'denied' ? 'Blocked — allow it in your browser settings' : 'Off';
   return `<div class="page-head"><div><h1>Settings</h1></div></div>
   <form id="settingsForm">
+    <fieldset><legend>Family members</legend>
+      <p class="help" style="margin-top:0">Keep medications for everyone you care for in one place. Each person's medications, reminders and notes are kept separate.</p>
+      <ul class="people-list">${state.people.map(p => {
+        const count = state.meds.filter(m => m.personId === p.id).length;
+        return `<li>${avatar(p)}<span class="people-name">${esc(p.name)}<small>${count} medication${count === 1 ? '' : 's'}</small></span>
+          <span class="people-actions"><button type="button" class="btn ghost sm" data-act="rename-person" data-id="${p.id}">Rename</button>
+          ${state.people.length > 1 ? `<button type="button" class="btn ghost sm" data-act="delete-person" data-id="${p.id}">Remove</button>` : ''}</span></li>`;
+      }).join('')}</ul>
+      <button type="button" class="btn sm" data-act="add-person">+ Add family member</button>
+    </fieldset>
     <fieldset><legend>Reminders</legend>
       <p>Notifications: <strong>${perm}</strong></p>
       <div class="row">${'Notification' in window && Notification.permission !== 'denied' ? `<button type="button" class="btn sm" data-act="notify">${canNotify() ? 'Re-check permission' : 'Turn on notifications'}</button>` : ''}
@@ -986,7 +1122,7 @@ function bindSettings() {
       const data = JSON.parse(await f.text());
       if (!Array.isArray(data.meds)) throw new Error('bad file');
       confirmBox('Replace your data?', 'Importing replaces everything currently on this device with the backup.', 'Import', true, () => {
-        state = { ...defaults(), ...data, settings: { ...defaults().settings, ...data.settings } };
+        state = upgrade(data);
         save(); toast('Backup imported.', 'success'); render();
       });
     } catch (err) { toast('That file is not a Medsprout backup.', 'danger'); }

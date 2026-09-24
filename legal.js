@@ -102,8 +102,10 @@ const LEGAL_PAGES = {
       <p>Medsprout is operated by ${legalVal(LEGAL_INFO.owner)} (“we”, “us”). Contact: ${legalVal(LEGAL_INFO.email)}.</p>
 
       <h2>2. Information you enter stays on your device</h2>
-      <p>The information you add to Medsprout, including medication names, strengths, label instructions, dose schedules, dose history, pill counts, refills, taper schedules, side-effect notes and your settings, is saved in your browser’s local storage on the device you are using.</p>
+      <p>The information you add to Medsprout, including the names of any family members you add, medication names, strengths, label instructions, dose schedules, dose history, pill counts, refills, taper schedules, side-effect notes and your settings, is saved in your browser’s local storage on the device you are using.</p>
       <p>This information is <strong>never sent to us</strong>. Medsprout has no user accounts, no database and no server that receives your information, so we cannot see, access, share, sell, recover or delete it for you.</p>
+
+      <p>If you track medications for family members or others in your care, their information is stored the same way, only on your device. Please make sure they, or their legal guardian, are comfortable with you keeping it.</p>
 
       <h2>3. What does leave your device</h2>
       <p>Like any website, a few technical things happen when the App loads:</p>
