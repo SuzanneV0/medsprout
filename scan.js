@@ -2,17 +2,20 @@
 
 /* =========================================================
    Medsprout — scan a prescription label
-   The photo is read on the device with Tesseract.js (loaded
-   from jsDelivr only when someone scans) and is never
+   The photo is read on the device with Tesseract.js (hosted
+   with the app, loaded only when someone scans) and is never
    uploaded or saved. parseLabel() turns the text into form
    values; people always review them before saving.
    ========================================================= */
 
+// Tesseract.js 7.0.0, its LSTM cores and English data are hosted with the app (vendor/),
+// so no third party is involved and the Content-Security-Policy can stay 'self'-only.
+const vendorUrl = p => new URL(`vendor/tesseract/${p}`, location.href).href;
 const OCR = {
-  script: 'https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js',
-  workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/worker.min.js',
-  corePath: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@7.0.0',
-  langPath: 'https://cdn.jsdelivr.net/npm/@tesseract.js-data/eng@1.0.0/4.0.0_best_int',
+  script: vendorUrl('tesseract.min.js'),
+  workerPath: vendorUrl('worker.min.js'),
+  corePath: vendorUrl('core'),
+  langPath: vendorUrl('lang'),
 };
 
 let ocrScript = null;
@@ -22,7 +25,6 @@ function loadOcr() {
     ocrScript = new Promise((resolve, reject) => {
       const s = document.createElement('script');
       s.src = OCR.script;
-      s.crossOrigin = 'anonymous';
       s.onload = () => resolve(window.Tesseract);
       s.onerror = () => { ocrScript = null; reject(new Error('load')); };
       document.head.appendChild(s);
@@ -79,6 +81,7 @@ async function readLabel(file, onProgress = () => {}) {
     workerPath: OCR.workerPath,
     corePath: OCR.corePath,
     langPath: OCR.langPath,
+    workerBlobURL: false, // load the worker from our own URL (CSP worker-src 'self', no blob:)
     logger: m => {
       if (m.status === 'recognizing text') onProgress('reading', m.progress || 0);
       else onProgress('loading', m.progress || 0);
@@ -124,15 +127,15 @@ const wordNum = w => {
   return Number.isFinite(n) ? n : null;
 };
 
-/**
- * Best-effort extraction from pharmacy-label text. Returns only what it found,
- * plus `found` (human-readable list) and `warnings`.
- */
 /** Common OCR slips on labels: "IU" read as TU/1U/lU, "mg" read as rng/mq. */
 const fixOcr = l => l
   .replace(/(\d)\s?(?:TU|1U|lU|IU|I\.U\.?)(?![a-z])/gi, '$1 IU')
   .replace(/(\d)\s?(?:rng|mq)(?![a-z])/gi, '$1 mg');
 
+/**
+ * Best-effort extraction from pharmacy-label text. Returns only what it found,
+ * plus `found` (human-readable list) and `warnings`.
+ */
 function parseLabel(raw) {
   const lines = String(raw || '').split(/\r?\n/).map(clean).map(fixOcr).filter(l => l.length > 1);
   const text = lines.join('\n');

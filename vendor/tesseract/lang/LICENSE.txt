@@ -1,0 +1,4 @@
+eng.traineddata.gz (4.0.0_best_int)
+Source: npm package @tesseract.js-data/eng@1.0.0 (https://github.com/naptha/tessdata)
+License: MIT, as declared in that package's package.json.
+The underlying model is from the Tesseract OCR project's tessdata (Apache License 2.0).

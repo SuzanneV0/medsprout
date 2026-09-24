@@ -89,8 +89,8 @@ const LEGAL_PAGES = {
       <h2>Third-party services and licences</h2>
       <ul>
         <li><strong>Hosting and anonymous visit counts:</strong> Vercel Inc. (Vercel Web Analytics)</li>
-        <li><strong>Fonts:</strong> Cal Sans and Questrial, both licensed under the SIL Open Font License 1.1, delivered by Google Fonts.</li>
-        <li><strong>Label scanning:</strong> Tesseract.js, licensed under the Apache License 2.0, delivered by jsDelivr. It runs entirely on your device.</li>
+        <li><strong>Fonts:</strong> Cal Sans and Questrial, both licensed under the SIL Open Font License 1.1, hosted with the App.</li>
+        <li><strong>Label scanning:</strong> Tesseract.js (Apache License 2.0) and its English language data package (MIT License), hosted with the App. It runs entirely on your device.</li>
       </ul>`,
   },
 
@@ -113,9 +113,8 @@ const LEGAL_PAGES = {
       <p>Like any website, a few technical things happen when the App loads:</p>
       <ul>
         <li><strong>Website hosting (Vercel).</strong> Your browser downloads the App’s files from our hosting provider, Vercel Inc. As with any website, Vercel may automatically process technical information such as your IP address, browser type and the time of the request, for example in server logs used for security and delivery. This does not include anything you enter into the App. See <a href="https://vercel.com/legal/privacy-policy" target="_blank" rel="noopener">Vercel’s privacy policy</a>.</li>
-        <li><strong>Fonts (Google Fonts).</strong> The App’s fonts are loaded from Google Fonts, so Google receives your IP address and browser information when the fonts are downloaded. See <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Google’s privacy policy</a>.</li>
         <li><strong>Anonymous visit counts (Vercel Web Analytics).</strong> When you open the App, an anonymous page view is recorded, including the page address, the referring website, your browser, operating system and device type, and your approximate location at country level, derived from your connection. It does not use third-party cookies. Instead, visits are counted with an anonymous code generated from the request, which is discarded after 24 hours. The data isn’t tied to your IP address, and it can’t identify you or follow you across other websites. It never includes anything you enter into the App. We use these totals only to understand how many people use Medsprout and roughly where. See <a href="https://vercel.com/docs/analytics/privacy-policy" target="_blank" rel="noopener">Vercel’s analytics privacy notice</a>.</li>
-        <li><strong>Label reader download (jsDelivr), only if you scan a label.</strong> The first time you use <em>Scan a label</em>, your browser downloads the text-recognition engine (Tesseract.js) and its English language file from the jsDelivr content network, so jsDelivr receives your IP address and browser information for that download. <strong>Your photo is never sent anywhere:</strong> it is read on your device and isn’t saved, not even on your device. Only the text that fills in the form is kept, once you save the medication. See <a href="https://www.jsdelivr.com/terms/privacy-policy" target="_blank" rel="noopener">jsDelivr’s privacy policy</a>.</li>
+        <li><strong>Label reader download, only if you scan a label.</strong> The first time you use <em>Scan a label</em>, your browser downloads the text-recognition engine (Tesseract.js) and its English language file from Medsprout’s own hosting (Vercel), like the rest of the App. <strong>Your photo is never sent anywhere:</strong> it is read on your device and isn’t saved, not even on your device. Only the text that fills in the form is kept, once you save the medication.</li>
       </ul>
       <p>We do not use this technical information to identify you, and we do not combine it with anything else.</p>
 
@@ -174,7 +173,7 @@ const LEGAL_PAGES = {
       </table></div>
 
       <h2>3. Third parties</h2>
-      <p>The App is hosted by Vercel, counts visits anonymously with Vercel Web Analytics (which does not use third-party cookies), loads its fonts from Google Fonts and, only if you scan a label, downloads its label reader from jsDelivr. Medsprout does not ask any of them to set cookies. Their handling of technical request information is described in <a href="https://vercel.com/legal/privacy-policy" target="_blank" rel="noopener">Vercel’s privacy policy</a> and <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Google’s privacy policy</a>.</p>
+      <p>The App, its fonts and its label reader are all served by our hosting provider, Vercel, which also counts visits anonymously with Vercel Web Analytics (it does not use third-party cookies). No other third-party services are used. Medsprout does not ask Vercel to set cookies. Vercel’s handling of technical request information is described in <a href="https://vercel.com/legal/privacy-policy" target="_blank" rel="noopener">Vercel’s privacy policy</a>.</p>
 
       <h2>4. Managing or clearing this storage</h2>
       <p>You can delete everything Medsprout stores with <em>Settings → Erase all data</em>, or by clearing this site’s data in your browser settings. Doing so permanently deletes your medications and history from this device, so export a backup first if you want to keep them.</p>
