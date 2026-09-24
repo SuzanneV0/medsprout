@@ -348,3 +348,22 @@ dialog h2 { margin-bottom: 12px; }
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
 .people-actions { display: flex; gap: 8px; }
+
+/* ---------- Pill icons & colour picker ---------- */
+.pill-icon { flex: 0 0 auto; display: block; }
+.med-title { display: inline-flex; align-items: center; gap: 8px; }
+.time-chip { display: inline-flex; align-items: center; gap: 6px; }
+.label { font-size: .92rem; font-weight: 600; }
+.swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(48px, 1fr)); gap: 8px; }
+.swatch {
+  position: relative; display: grid; place-content: center; aspect-ratio: 1; cursor: pointer;
+  border-radius: 12px; border: 1.5px solid var(--line); background: var(--charcoal);
+}
+.swatch:hover { border-color: var(--linen); }
+.swatch input { position: absolute; opacity: 0; inset: 0; margin: 0; width: 100%; height: 100%; cursor: pointer; }
+.swatch:has(input:checked) { border-color: var(--celadon); box-shadow: 0 0 0 2px var(--celadon); background: rgba(161, 205, 168, .12); }
+.swatch:has(input:focus-visible) { outline: 3px solid var(--celadon); outline-offset: 2px; }
+.swatch.used::after {
+  content: ''; position: absolute; top: 5px; right: 5px; width: 6px; height: 6px;
+  border-radius: 50%; background: var(--muted);
+}

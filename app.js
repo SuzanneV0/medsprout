@@ -54,7 +54,11 @@ function upgrade(s) {
   s.people.forEach(p => { if (p.id === 'me' && p.name === 'Me') p.name = nextUserName(s.people); });
   const first = s.people[0].id;
   const known = id => s.people.some(p => p.id === id);
-  s.meds.forEach(m => { if (!known(m.personId)) m.personId = first; });
+  s.meds.forEach((m, i) => {
+    if (!known(m.personId)) m.personId = first;
+    if (m.kind !== 'vitamin') m.kind = 'med';
+    if (!Number.isInteger(m.color)) m.color = i % PILL_COLORS.length;
+  });
   s.sideEffects.forEach(e => {
     if (!known(e.personId)) e.personId = (s.meds.find(m => m.id === e.medId) || {}).personId || first;
   });
@@ -79,6 +83,13 @@ function save() {
   catch (e) { toast('Could not save — storage is unavailable in this browser.', 'danger'); }
 }
 const getMed = id => state.meds.find(m => m.id === id);
+const isVitamin = m => m.kind === 'vitamin';
+/** First colour combo not already used by another medication, so new ones stand out by default. */
+function nextFreeColor(exceptId) {
+  const used = new Set(state.meds.filter(m => m.id !== exceptId).map(m => m.color));
+  for (let i = 0; i < PILL_COLORS.length; i++) if (!used.has(i)) return i;
+  return state.meds.length % PILL_COLORS.length;
+}
 
 /* ---------- family members ---------- */
 const getPerson = id => state.people.find(p => p.id === id);
@@ -541,11 +552,11 @@ function viewToday() {
   });
   meds.forEach(m => {
     const r = refillStatus(m);
-    if (r.level === 'out') alerts.push(`<div class="alert out" role="alert"><div class="alert-body"><strong>Prescription not refilled: ${esc(medLabel(m))}</strong>
+    if (r.level === 'out') alerts.push(`<div class="alert out" role="alert"><div class="alert-body"><strong>${isVitamin(m) ? 'Out of stock' : 'Prescription not refilled'}: ${esc(medLabel(m))}</strong>
       <p>${num(m.pillsRemaining) <= 0 ? 'You are out of pills.' : `Only ${fmtPills(num(m.pillsRemaining))} left — not enough for today.`} Refill now so you don't miss doses.</p></div>
       <button class="btn sm" data-act="refill" data-id="${m.id}">Log refill</button></div>`);
-    else if (r.level === 'soon') alerts.push(`<div class="alert soon"><div class="alert-body"><strong>Refill soon: ${esc(medLabel(m))}</strong>
-      <p>About ${r.days} day${r.days === 1 ? '' : 's'} of pills left — runs out ${fmtDate(r.runOut)}. Order your refill now.</p></div>
+    else if (r.level === 'soon') alerts.push(`<div class="alert soon"><div class="alert-body"><strong>${isVitamin(m) ? 'Restock soon' : 'Refill soon'}: ${esc(medLabel(m))}</strong>
+      <p>About ${r.days} day${r.days === 1 ? '' : 's'} of pills left — runs out ${fmtDate(r.runOut)}. ${isVitamin(m) ? 'Pick up more soon.' : 'Order your refill now.'}</p></div>
       <button class="btn sm" data-act="refill" data-id="${m.id}">Log refill</button></div>`);
   });
 
@@ -562,7 +573,7 @@ function viewToday() {
     <div class="section"><h2>Schedule</h2>
       ${slots.length ? `<div class="timeline">${cards}</div>` : '<p class="muted">No doses scheduled today.</p>'}
     </div>
-    ${tomorrow.length ? `<div class="section"><h2>Tomorrow</h2><div class="row">${tomorrow.map(s => `<span class="time-chip">${fmtMin(s.time)} · ${esc(medLabel(s.med))} × ${fmtNum(s.pills)}</span>`).join('')}</div></div>` : ''}
+    ${tomorrow.length ? `<div class="section"><h2>Tomorrow</h2><div class="row">${tomorrow.map(s => `<span class="time-chip">${pillIcon(s.med, 18)}${fmtMin(s.time)} · ${esc(medLabel(s.med))} × ${fmtNum(s.pills)}</span>`).join('')}</div></div>` : ''}
     <div class="section"><h2>This week</h2>${weekStrip(meds)}</div>`;
 }
 
@@ -583,7 +594,7 @@ function doseCard(s, st) {
   return `<article class="dose ${st}">
     <div class="dose-time">${fmtMin(s.time)}${s.shifted ? `<s>${fmtMin(s.base)}</s><span class="moved">re-spaced</span>` : ''}</div>
     <div>
-      <div class="row"><h3>${esc(m.name)}</h3>${whoTag(m)}<span class="chip ${st}">${label}</span>${taperActive(m, s.k) ? '<span class="chip taper">Taper</span>' : ''}</div>
+      <div class="row"><h3 class="med-title">${pillIcon(m)}${esc(m.name)}</h3>${whoTag(m)}<span class="chip ${st}">${label}</span>${taperActive(m, s.k) ? '<span class="chip taper">Taper</span>' : ''}</div>
       <p class="meta">${fmtPills(s.pills)}${m.strength ? ` · ${esc(m.strength)}` : ''}${m.instructions ? ` · ${esc(m.instructions)}` : ''}</p>
       <div class="actions">${actions}</div>
     </div></article>`;
@@ -632,15 +643,15 @@ function viewMeds() {
     const bottle = Math.max(num(m.pillsPerBottle), num(m.pillsRemaining), 1);
     const pct = Math.min(100, (num(m.pillsRemaining) / bottle) * 100);
     const chip = !m.active ? '<span class="chip skipped">Paused</span>'
-      : r.level === 'out' ? '<span class="chip out">Refill needed</span>'
-      : r.level === 'soon' ? '<span class="chip soon">Refill soon</span>' : '';
+      : r.level === 'out' ? `<span class="chip out">${isVitamin(m) ? 'Restock needed' : 'Refill needed'}</span>`
+      : r.level === 'soon' ? `<span class="chip soon">${isVitamin(m) ? 'Restock soon' : 'Refill soon'}</span>` : '';
     const supply = !m.active ? 'Paused'
       : r.taperEnds ? `Enough to finish taper (ends ${fmtDate(r.taperEnds)})`
       : r.days === Infinity ? 'Plenty on hand'
       : r.days === 0 ? 'Not enough for today' : `${r.days} day${r.days === 1 ? '' : 's'} left · runs out ${fmtDate(r.runOut)}`;
     const refills = (m.refills || []).slice().reverse();
     return `<article class="card med-card ${m.active ? '' : 'paused'} ${flashMedId === m.id ? 'new-flash' : ''}">
-      <div class="row"><h3>${esc(m.name)}</h3>${whoTag(m)}${chip}${m.taper && m.taper.enabled ? '<span class="chip taper">Taper</span>' : ''}</div>
+      <div class="row"><h3 class="med-title">${pillIcon(m, 32)}${esc(m.name)}</h3>${whoTag(m)}${chip}${m.taper && m.taper.enabled ? '<span class="chip taper">Taper</span>' : ''}</div>
       <p class="sub">${esc(m.strength || '')}${m.strength ? ' · ' : ''}${fmtPills(num(m.pillsPerDose, 1))} × ${times.length} a day · ${scheduleLabel(m)}</p>
       <div class="row">${times.map(t => `<span class="time-chip">${fmtMin(t)}</span>`).join('')}</div>
       ${m.instructions ? `<div class="instr">📋 ${esc(m.instructions)}</div>` : ''}
@@ -703,6 +714,8 @@ function blankMed() {
     taper: { enabled: false, startDate: dayKey(), startDaily: 1, reduceBy: 1, everyN: 1, unit: 'weeks', everyDays: 7 },
     refills: [],
     personId: state.viewing !== 'all' ? state.viewing : state.people[0].id,
+    kind: 'med',
+    color: nextFreeColor(),
   };
 }
 
@@ -719,7 +732,15 @@ function viewMedForm(id) {
       <div class="field"><label for="f-person">Who is this for?</label>
         <div class="row"><select id="f-person" name="personId" style="flex:1">${personOptions(m.personId)}</select>
         <button type="button" class="btn ghost sm" id="addPersonBtn">+ Add person</button></div></div>
-      <div class="field"><label for="f-name">Medication name *</label><input id="f-name" name="name" required value="${esc(m.name)}" placeholder="e.g. Amoxicillin" autocomplete="off"></div>
+      <div class="field"><span class="label">Type</span>
+        <div class="seg" role="radiogroup" aria-label="Type">
+          <label><input type="radio" name="kind" value="med" ${isVitamin(m) ? '' : 'checked'}> Medication</label>
+          <label><input type="radio" name="kind" value="vitamin" ${isVitamin(m) ? 'checked' : ''}> Vitamin or supplement</label>
+        </div></div>
+      <div class="field"><label for="f-name">Name *</label><input id="f-name" name="name" required value="${esc(m.name)}" placeholder="${isVitamin(m) ? 'e.g. Vitamin D3' : 'e.g. Amoxicillin'}" autocomplete="off"></div>
+      <div class="field"><span class="label" id="colorLabel">Colour <span class="help" id="colorName">${pillColor(m.color).name}</span></span>
+        <div class="swatches" id="swatches" role="radiogroup" aria-labelledby="colorLabel">${swatchGrid(m)}</div>
+        <p class="help" style="margin:6px 0 0">A dot marks colours already used by your other medications.</p></div>
       <div class="inline-fields">
         <div class="field"><label for="f-strength">Strength</label><input id="f-strength" name="strength" value="${esc(m.strength)}" placeholder="e.g. 500 mg"></div>
         <div class="field"><label for="f-ppd">Pills per dose *</label><input id="f-ppd" name="pillsPerDose" type="number" min="0.5" step="0.5" value="${num(m.pillsPerDose, 1)}" required></div>
@@ -801,6 +822,14 @@ const customTimeRow = v => `<div class="row"><input type="time" name="customTime
 const personOptions = selected => state.people
   .map(p => `<option value="${p.id}" ${p.id === selected ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
 
+/** The 20 colour choices, drawn in the medication's current type (capsule or vitamin). */
+function swatchGrid(m) {
+  const used = new Set(state.meds.filter(x => x.id !== m.id).map(x => x.color));
+  return PILL_COLORS.map((c, i) => `<label class="swatch ${used.has(i) ? 'used' : ''}" title="${c.name}${used.has(i) ? ' (in use)' : ''}">
+      <input type="radio" name="color" value="${i}" ${i === m.color ? 'checked' : ''} aria-label="${c.name}${used.has(i) ? ', already used' : ''}">
+      ${pillIcon({ kind: m.kind, color: i }, 30)}</label>`).join('');
+}
+
 function readMedForm(form, base) {
   const fd = new FormData(form);
   const unit = fd.get('taperUnit') || 'weeks';
@@ -810,6 +839,8 @@ function readMedForm(form, base) {
   return {
     ...base,
     personId: getPerson(fd.get('personId')) ? fd.get('personId') : base.personId,
+    kind: fd.get('kind') === 'vitamin' ? 'vitamin' : 'med',
+    color: fd.get('color') !== null ? Number(fd.get('color')) : base.color,
     name: String(fd.get('name') || '').trim(),
     strength: String(fd.get('strength') || '').trim(),
     instructions: String(fd.get('instructions') || '').trim(),
@@ -862,7 +893,15 @@ function bindMedForm(id) {
     const mode = (new FormData(form)).get('scheduleMode');
     $$('[data-mode]', form).forEach(el => { el.hidden = !el.dataset.mode.split(' ').includes(mode); });
   };
+  let lastKind = original.kind;
   const updatePreview = () => {
+    const look = readMedForm(form, original);
+    if (look.kind !== lastKind) {
+      lastKind = look.kind;
+      $('#swatches').innerHTML = swatchGrid(look);
+      $('#f-name').placeholder = isVitamin(look) ? 'e.g. Vitamin D3' : 'e.g. Amoxicillin';
+    }
+    $('#colorName').textContent = pillColor(look.color).name;
     const m = readMedForm(form, original);
     syncMode();
     const times = baseTimes(m);
@@ -951,7 +990,7 @@ function viewTapers() {
     const t = m.taper;
     const notStarted = today < t.startDate;
     const next = steps.find(s => s.start > today);
-    return `<article class="card"><div class="row"><h2 style="margin:0">${esc(m.name)}</h2>${whoTag(m)}<span class="chip taper">Reduce ${fmtNum(t.reduceBy)} every ${t.everyN} ${t.unit === 'days' ? (t.everyN === 1 ? 'day' : 'days') : (t.everyN === 1 ? 'week' : 'weeks')}</span></div>
+    return `<article class="card"><div class="row"><h2 class="med-title" style="margin:0">${pillIcon(m, 32)}${esc(m.name)}</h2>${whoTag(m)}<span class="chip taper">Reduce ${fmtNum(t.reduceBy)} every ${t.everyN} ${t.unit === 'days' ? (t.everyN === 1 ? 'day' : 'days') : (t.everyN === 1 ? 'week' : 'weeks')}</span></div>
       <p class="muted" style="margin:8px 0 14px">${notStarted ? `Starts ${fmtDate(t.startDate)}.` : cur ? `Now: <strong style="color:var(--linen)">${fmtPills(cur.daily)} a day</strong> (step ${cur.step} of ${steps.length - 1}).` : 'Taper complete.'}
       ${next ? ` Next change ${fmtDate(next.start)} → ${next.daily > 0 ? fmtPills(next.daily) + ' a day' : 'stop'}.` : ''}</p>
       ${taperTable(m, steps, today)}
@@ -1041,7 +1080,7 @@ function viewHistory() {
     if (!slots.length) continue;
     rows.push(`<article class="card"><div class="row"><h3 style="margin:0">${i === 0 ? 'Today' : i === 1 ? 'Yesterday' : fmtDate(k)}</h3>
       <span class="spacer"></span><small>${slots.filter(x => x.st === 'taken').length} of ${slots.filter(x => x.st !== 'skipped').length} taken</small></div>
-      <ul class="mini-list">${slots.map(({ s, st }) => `<li><span>${fmtMin(s.time)} · ${esc(medLabel(s.med))} × ${fmtNum(s.pills)}</span>
+      <ul class="mini-list">${slots.map(({ s, st }) => `<li><span class="med-title">${pillIcon(s.med, 20)}${fmtMin(s.time)} · ${esc(medLabel(s.med))} × ${fmtNum(s.pills)}</span>
         <span>${st === 'taken' ? `<span class="chip taken">Taken ${new Date(s.rec.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>` : `<span class="chip ${st}">${st[0].toUpperCase() + st.slice(1)}</span>`}
         ${s.rec ? ` <button class="linkish" data-act="undo" data-key="${s.key}">Undo</button>` : i > 0 ? ` <button class="linkish" data-act="take" data-key="${s.key}">Log as taken</button>` : ''}</span></li>`).join('')}</ul></article>`);
   }
