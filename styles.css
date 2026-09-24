@@ -87,7 +87,7 @@ small, .muted { color: var(--muted); }
 .menu a.active { font-weight: 700; box-shadow: inset 3px 0 0 var(--charcoal); }
 
 /* ---------- Layout ---------- */
-main { max-width: var(--maxw); margin: 0 auto; padding: 22px var(--gutter) 96px; outline: none; }
+main { max-width: var(--maxw); margin: 0 auto; padding: 22px var(--gutter) 48px; outline: none; min-height: calc(100vh - 220px); }
 .page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
 .page-head p { margin: 0; color: var(--muted); }
 .section { margin-top: 28px; }
@@ -253,6 +253,37 @@ tr:last-child td { border-bottom: 0; }
 /* ---------- Empty ---------- */
 .empty { text-align: center; padding: 36px 16px; border: 1.5px dashed var(--line); border-radius: var(--radius); }
 .empty h2 { margin-bottom: 6px; }
+
+/* ---------- Notice (local-storage disclaimer, policy summaries) ---------- */
+.notice {
+  background: rgba(161, 205, 168, .12); border-left: 4px solid var(--celadon);
+  border-radius: var(--radius-sm); padding: 12px 14px; margin: 0 0 16px;
+  font-size: .93rem; line-height: 1.55;
+}
+.notice strong { display: block; margin-bottom: 2px; }
+
+/* ---------- Legal pages ---------- */
+.doc { max-width: 70ch; }
+.doc h2 { font-size: 1.2rem; margin: 28px 0 8px; }
+.doc p, .doc li { color: var(--linen); }
+.doc ul { padding-left: 1.2em; margin: 0 0 .8em; }
+.doc li { margin-bottom: 6px; }
+.doc td, .doc th { white-space: normal; vertical-align: top; }
+.doc td:first-child { white-space: nowrap; }
+.doc .table-wrap { margin-bottom: 1em; }
+.doc-more { margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--line); }
+.placeholder { background: rgba(189, 99, 47, .25); outline: 1px dashed var(--caramel); border-radius: 4px; padding: 0 4px; }
+
+/* ---------- Footer ---------- */
+.site-footer {
+  border-top: 1px solid var(--line);
+  padding: 22px var(--gutter) calc(22px + env(safe-area-inset-bottom));
+  text-align: center; font-size: .88rem; color: var(--muted);
+}
+.site-footer nav { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 22px; margin-bottom: 10px; }
+.site-footer a { color: var(--celadon); text-decoration: none; }
+.site-footer a:hover { text-decoration: underline; }
+.site-footer p { margin: 0; }
 
 /* ---------- Toasts ---------- */
 .toasts { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom)); transform: translateX(-50%); display: grid; gap: 8px; z-index: 50; width: min(92vw, 440px); }

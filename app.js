@@ -404,7 +404,8 @@ function render() {
   $$('.menu a').forEach(a => a.classList.toggle('active', a.dataset.nav === view));
   const app = $('#app');
   const views = { today: viewToday, meds: viewMeds, med: () => viewMedForm(arg), tapers: viewTapers, effects: viewEffects, history: viewHistory, settings: viewSettings };
-  app.innerHTML = (views[view] || viewToday)();
+  app.innerHTML = LEGAL_PAGES[view] ? viewLegal(view) : (views[view] || viewToday)();
+  document.title = LEGAL_PAGES[view] ? `${LEGAL_PAGES[view].title} · Medsprout` : 'Medsprout';
   if (view === 'med') bindMedForm(arg);
   if (view === 'effects') bindEffectForm();
   if (view === 'settings') bindSettings();
@@ -672,6 +673,13 @@ function viewMedForm(id) {
       </div>
     </fieldset>
 
+    <div class="notice" role="note">
+      <strong>🔒 Your data stays on this device.</strong>
+      Everything you enter is stored locally, in this browser on this device. It is never sent to or stored by Medsprout.
+      Clearing your browser data or uninstalling the app will delete it, so use <em>Settings → Export backup</em> to keep a copy.
+      <a href="#privacy">Privacy Policy</a>
+    </div>
+
     <p class="error" id="formError" role="alert"></p>
     <div class="form-actions"><button class="btn">${isNew ? 'Save medication' : 'Save changes'}</button><a class="btn ghost" href="#meds">Cancel</a></div>
   </form>`;
@@ -908,6 +916,18 @@ function viewHistory() {
     ${rows.length ? `<div class="grid">${rows.join('')}</div>` : '<div class="empty"><p class="muted" style="margin:0">No dose history yet.</p></div>'}`;
 }
 
+/* ---------- Legal pages (content lives in legal.js) ---------- */
+function viewLegal(key) {
+  const page = LEGAL_PAGES[key];
+  const others = Object.entries(LEGAL_PAGES).filter(([k]) => k !== key)
+    .map(([k, p]) => `<a href="#${k}">${p.title}</a>`).join(' · ');
+  return `<article class="doc">
+    <div class="page-head"><div><h1>${page.title}</h1><p>Last updated ${LEGAL_INFO.updated}</p></div></div>
+    ${page.body()}
+    <p class="doc-more">${others}</p>
+  </article>`;
+}
+
 /* ---------- Settings ---------- */
 function viewSettings() {
   const s = state.settings;
@@ -930,7 +950,7 @@ function viewSettings() {
       <p style="margin:0"><strong>Android:</strong> open in Chrome, tap ⋮, then <em>Install app</em> (or <em>Add to Home screen</em>).</p>
     </fieldset>
     <fieldset><legend>Your data</legend>
-      <p class="help">Everything is stored only on this device. Export a backup to move it to another device.</p>
+      <p class="help">Everything is stored only on this device, never on Medsprout. Export a backup to move it to another device. <a href="#privacy">Privacy Policy</a></p>
       <div class="row"><button type="button" class="btn ghost sm" id="exportBtn">Export backup</button>
         <label class="btn ghost sm" for="importFile" style="cursor:pointer">Import backup</label><input type="file" id="importFile" accept="application/json" hidden>
         <button type="button" class="btn danger sm" id="resetBtn">Erase all data</button></div>
@@ -1003,6 +1023,7 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   }
 })();
 
+$('#year').textContent = new Date().getFullYear();
 document.addEventListener('visibilitychange', () => { if (!document.hidden) tick(); });
 render();
 tick();

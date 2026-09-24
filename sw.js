@@ -1,6 +1,6 @@
 // Medsprout service worker: offline app shell + notification actions.
-const CACHE = 'medsprout-v1';
-const SHELL = ['./', './index.html', './styles.css', './app.js', './icon.svg', './manifest.webmanifest'];
+const CACHE = 'medsprout-v2';
+const SHELL = ['./', './index.html', './styles.css', './legal.js', './app.js', './icon.svg', './manifest.webmanifest'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
