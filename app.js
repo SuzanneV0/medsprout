@@ -36,7 +36,7 @@ const atMin = (iso, k) => { const d = new Date(iso); return daysBetween(parseDay
 
 /* ---------- state ---------- */
 const defaults = () => ({
-  people: [{ id: 'me', name: 'Me', color: 0 }], // family members; every med belongs to one
+  people: [{ id: 'me', name: 'User 1', color: 0 }], // family members; every med belongs to one
   viewing: 'all',   // 'all' or a person id — which family member the screens show
   meds: [],
   doses: {},        // { 'YYYY-MM-DD': { medId: { slotIdx: { status, at, pills } } } }
@@ -51,6 +51,7 @@ function upgrade(s) {
   const d = defaults();
   s = { ...d, ...s, settings: { ...d.settings, ...s.settings } };
   if (!Array.isArray(s.people) || !s.people.length) s.people = d.people;
+  s.people.forEach(p => { if (p.id === 'me' && p.name === 'Me') p.name = nextUserName(s.people); });
   const first = s.people[0].id;
   const known = id => s.people.some(p => p.id === id);
   s.meds.forEach(m => { if (!known(m.personId)) m.personId = first; });
@@ -81,13 +82,20 @@ const getMed = id => state.meds.find(m => m.id === id);
 
 /* ---------- family members ---------- */
 const getPerson = id => state.people.find(p => p.id === id);
+/** Neutral default names — "User 1", "User 2"… — using the lowest number not already taken. */
+function nextUserName(people = state.people) {
+  const taken = new Set(people.map(p => p.name.trim().toLowerCase()));
+  let n = 1;
+  while (taken.has(`user ${n}`)) n++;
+  return `User ${n}`;
+}
 const isFamily = () => state.people.length > 1;
 /** Medications for whoever is selected in the switcher. */
 const visibleMeds = () => state.viewing === 'all' ? state.meds : state.meds.filter(m => m.personId === state.viewing);
 const visiblePeople = () => state.viewing === 'all' ? state.people : state.people.filter(p => p.id === state.viewing);
-/** "Mom · Amoxicillin" once there's more than one person, otherwise just "Amoxicillin". */
+/** "User 2 · Amoxicillin" once there's more than one person, otherwise just "Amoxicillin". */
 const medLabel = m => { const p = getPerson(m.personId); return isFamily() && p ? `${p.name} · ${m.name}` : m.name; };
-/** "Mary Smith" → "MS", "Mom" → "Mo", so one-word names that share a first letter still look different. */
+/** "Sam Lee" → "SL", "Sam" → "Sa", "User 2" → "U2", so names that share a first letter still look different. */
 const initials = name => {
   const words = name.trim().split(/\s+/).filter(Boolean);
   if (!words.length) return '?';
@@ -444,12 +452,11 @@ function personModal(id, onDone) {
   const p = id && getPerson(id);
   openModal(`<form><h2>${p ? `Rename ${esc(p.name)}` : 'Add a family member'}</h2>
     <div class="field"><label for="p-name">Name</label>
-      <input id="p-name" name="name" required maxlength="40" value="${p ? esc(p.name) : ''}" placeholder="e.g. Mom, Liam, Grandpa" autocomplete="off"></div>
-    ${p ? '' : '<p class="help">Their medications and reminders will be kept separately, and everything stays on this device.</p>'}
+      <input id="p-name" name="name" maxlength="40" value="${esc(p ? p.name : nextUserName())}" autocomplete="off"></div>
+    ${p ? '' : '<p class="help">Keep the default or type any name you like. Their medications and reminders are kept separately, and everything stays on this device.</p>'}
     <div class="row"><button class="btn">${p ? 'Save' : 'Add'}</button><button type="button" class="btn ghost" data-close>Cancel</button></div></form>`,
   fd => {
-    const name = String(fd.get('name') || '').trim();
-    if (!name) return false;
+    const name = String(fd.get('name') || '').trim() || (p ? p.name : nextUserName());
     if (state.people.some(x => x.id !== id && x.name.toLowerCase() === name.toLowerCase())) { toast(`There's already someone called ${name}.`, 'warn'); return false; }
     let person = p;
     if (p) p.name = name;
@@ -461,7 +468,7 @@ function personModal(id, onDone) {
     toast(p ? 'Name updated.' : `${name} added.`, 'success');
     if (onDone) onDone(person); else render();
   });
-  setTimeout(() => $('#p-name', modal) && $('#p-name', modal).focus(), 50);
+  setTimeout(() => { const f = $('#p-name', modal); if (f) { f.focus(); f.select(); } }, 50);
 }
 
 function deletePerson(id) {
