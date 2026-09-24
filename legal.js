@@ -7,9 +7,9 @@
    ========================================================= */
 
 const LEGAL_INFO = {
-  owner: '[Owner or company name]',
-  email: '[contact email]',
-  jurisdiction: '[Province/State, Country]',
+  owner: 'Medsprout',
+  email: 'medsproutapp@gmail.com',
+  jurisdiction: 'Ontario, Canada',
   updated: 'September 24, 2026',
 };
 
@@ -57,7 +57,7 @@ const LEGAL_PAGES = {
       <p>To the maximum extent permitted by law, ${legalVal(LEGAL_INFO.owner)} will not be liable for any loss or harm arising from your use of, or inability to use, the App, including missed, late or incorrect doses, reminders that were not delivered, incorrect calculations, or lost data. Nothing in these Terms limits any rights you have that cannot be limited by law.</p>
 
       <h2>10. Governing law</h2>
-      <p>These Terms are governed by the laws of ${legalVal(LEGAL_INFO.jurisdiction)}, without regard to its conflict-of-law rules.</p>
+      <p>These Terms are governed by the laws of the Province of Ontario and the federal laws of Canada that apply there, without regard to conflict-of-law rules. Any dispute will be handled by the courts of Ontario, unless the law where you live gives you the right to bring it elsewhere.</p>
 
       <h2>11. Changes to these Terms</h2>
       <p>We may update these Terms from time to time. The “Last updated” date above shows when they last changed. Continuing to use the App after a change means you accept the updated Terms.</p>
@@ -71,7 +71,7 @@ const LEGAL_PAGES = {
     title: 'Legal',
     body: () => `
       <h2>Who runs Medsprout</h2>
-      <p>Medsprout is operated by ${legalVal(LEGAL_INFO.owner)}, ${legalVal(LEGAL_INFO.jurisdiction)}.<br>Contact: ${legalVal(LEGAL_INFO.email)}</p>
+      <p>Medsprout is an independent project based in ${legalVal(LEGAL_INFO.jurisdiction)}.<br>Contact: ${legalVal(LEGAL_INFO.email)}</p>
 
       <h2>Medical disclaimer</h2>
       <p>Medsprout is a reminder and record-keeping tool. It is not a medical device, and nothing in it is medical advice. It does not replace your doctor, pharmacist or other healthcare provider.</p>
