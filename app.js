@@ -1314,8 +1314,37 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   }
 })();
 
+/* ---------- update check ----------
+   Installed apps (especially on iPhone) resume an old copy from memory instead of
+   reloading. Compare the server's fingerprints (ETags) of the app's files with the
+   ones seen at start-up, and offer a refresh when they change. HEAD requests skip
+   the service worker, so this sees what's really live. */
+const APP_FILES = ['./', 'app.js', 'pills.js', 'scan.js', 'legal.js', 'styles.css'];
+let appFingerprint = null;
+async function fingerprint() {
+  try {
+    const tags = await Promise.all(APP_FILES.map(f => fetch(f, { method: 'HEAD', cache: 'no-store' })
+      .then(r => (r.ok ? r.headers.get('etag') || r.headers.get('last-modified') || '' : null))));
+    return tags.includes(null) ? null : tags.join('|');
+  } catch (e) { return null; } // offline: try again later
+}
+async function checkForUpdate() {
+  if (!location.protocol.startsWith('http') || $('#updateBar')) return;
+  const now = await fingerprint();
+  if (!now) return;
+  if (appFingerprint === null) { appFingerprint = now; return; }
+  if (now !== appFingerprint) {
+    document.body.insertAdjacentHTML('beforeend', `<div class="update-bar" id="updateBar" role="status">
+      <span>A new version of Medsprout is available.</span>
+      <button class="btn sm" id="updateBtn">Refresh</button></div>`);
+    $('#updateBtn').addEventListener('click', () => location.reload());
+  }
+}
+
 $('#year').textContent = new Date().getFullYear();
-document.addEventListener('visibilitychange', () => { if (!document.hidden) tick(); });
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { tick(); checkForUpdate(); } });
 render();
 tick();
 setInterval(tick, 20000);
+checkForUpdate();
+setInterval(checkForUpdate, 30 * 60000);

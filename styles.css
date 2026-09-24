@@ -408,3 +408,14 @@ dialog h2 { margin-bottom: 12px; }
   background: transparent; color: var(--muted); font-size: 1.4rem; line-height: 1; cursor: pointer;
 }
 .welcome-close:hover { color: var(--linen); background: rgba(243, 233, 220, .08); }
+
+/* ---------- Update available ---------- */
+.update-bar {
+  position: fixed; left: 50%; transform: translateX(-50%); z-index: 60;
+  bottom: calc(16px + env(safe-area-inset-bottom)); width: min(92vw, 460px);
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 10px 10px 10px 16px; border-radius: 14px;
+  background: var(--celadon); color: var(--charcoal); font-weight: 600;
+  box-shadow: 0 10px 30px rgba(0,0,0,.35);
+}
+.update-bar .btn { background: var(--charcoal); color: var(--linen); flex: 0 0 auto; }
