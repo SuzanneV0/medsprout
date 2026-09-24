@@ -1,6 +1,6 @@
 {
-  "name": "Doseline — Medication Tracker",
-  "short_name": "Doseline",
+  "name": "Medsprout — Medication Tracker",
+  "short_name": "Medsprout",
   "description": "Track prescriptions, dose reminders, refills, tapers and side effects.",
   "start_url": "./#today",
   "scope": "./",

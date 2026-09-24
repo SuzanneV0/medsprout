@@ -1,11 +1,12 @@
 'use strict';
 
 /* =========================================================
-   Doseline — medication tracker (PWA)
+   Medsprout — medication tracker (PWA)
    All data stays on the device in localStorage.
    ========================================================= */
 
-const STORE_KEY = 'doseline:v1';
+const STORE_KEY = 'medsprout:v1';
+const LEGACY_STORE_KEY = 'doseline:v1'; // the app's name before it became Medsprout
 
 /* ---------- tiny helpers ---------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -46,7 +47,11 @@ const defaults = () => ({
 let state = load();
 function load() {
   try {
-    const raw = localStorage.getItem(STORE_KEY);
+    let raw = localStorage.getItem(STORE_KEY);
+    if (!raw && (raw = localStorage.getItem(LEGACY_STORE_KEY))) {
+      localStorage.setItem(STORE_KEY, raw);
+      localStorage.removeItem(LEGACY_STORE_KEY);
+    }
     if (raw) {
       const s = JSON.parse(raw), d = defaults();
       return { ...d, ...s, settings: { ...d.settings, ...s.settings } };
@@ -501,7 +506,7 @@ function notifBanner() {
 }
 
 async function enableNotifications() {
-  if (!('Notification' in window)) { toast('This browser does not support notifications. On iPhone, add Doseline to your Home Screen first.', 'warn', 6000); return; }
+  if (!('Notification' in window)) { toast('This browser does not support notifications. On iPhone, add Medsprout to your Home Screen first.', 'warn', 6000); return; }
   const p = await Notification.requestPermission();
   state.settings.notifications = p === 'granted';
   save();
@@ -921,7 +926,7 @@ function viewSettings() {
         <select id="s-window" name="refillWindowDays">${[2, 3, 4, 5, 7, 10, 14].map(v => `<option value="${v}" ${num(s.refillWindowDays) === v ? 'selected' : ''}>${v} days</option>`).join('')}</select></div>
     </fieldset>
     <fieldset><legend>Install on your phone</legend>
-      <p><strong>iPhone / iPad:</strong> open this page in Safari, tap Share, then <em>Add to Home Screen</em>. Open Doseline from the Home Screen icon, then turn on notifications.</p>
+      <p><strong>iPhone / iPad:</strong> open this page in Safari, tap Share, then <em>Add to Home Screen</em>. Open Medsprout from the Home Screen icon, then turn on notifications.</p>
       <p style="margin:0"><strong>Android:</strong> open in Chrome, tap ⋮, then <em>Install app</em> (or <em>Add to Home screen</em>).</p>
     </fieldset>
     <fieldset><legend>Your data</legend>
@@ -943,14 +948,14 @@ function bindSettings() {
     }
   });
   const test = $('#testNotif');
-  if (test) test.addEventListener('click', () => sysNotify('Doseline test', 'Reminders are working. 💊', 'test'));
+  if (test) test.addEventListener('click', () => sysNotify('Medsprout test', 'Reminders are working. 💊', 'test'));
   const off = $('#notifOff');
   if (off) off.addEventListener('click', () => { state.settings.notifications = false; save(); render(); });
   $('#exportBtn').addEventListener('click', () => {
     const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `doseline-backup-${dayKey()}.json`;
+    a.download = `medsprout-backup-${dayKey()}.json`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   });
@@ -964,7 +969,7 @@ function bindSettings() {
         state = { ...defaults(), ...data, settings: { ...defaults().settings, ...data.settings } };
         save(); toast('Backup imported.', 'success'); render();
       });
-    } catch (err) { toast('That file is not a Doseline backup.', 'danger'); }
+    } catch (err) { toast('That file is not a Medsprout backup.', 'danger'); }
   });
   $('#resetBtn').addEventListener('click', () => confirmBox('Erase all data?', 'This deletes every medication, dose record and side-effect note on this device. Export a backup first if you might need it.', 'Erase everything', true, () => {
     state = defaults(); save(); toast('All data erased.'); location.hash = '#today'; render();

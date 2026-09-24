@@ -1,5 +1,5 @@
-// Doseline service worker: offline app shell + notification actions.
-const CACHE = 'doseline-v1';
+// Medsprout service worker: offline app shell + notification actions.
+const CACHE = 'medsprout-v1';
 const SHELL = ['./', './index.html', './styles.css', './app.js', './icon.svg', './manifest.webmanifest'];
 
 self.addEventListener('install', e => {

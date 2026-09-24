@@ -2,9 +2,9 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "doseline",
+      "name": "medsprout",
       "runtimeExecutable": "python",
-      "runtimeArgs": ["-m", "http.server", "5188"],
+      "runtimeArgs": ["-m", "http.server", "5188", "--directory", "C:\\Users\\suzan\\Med App"],
       "port": 5188
     }
   ]
