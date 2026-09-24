@@ -1,0 +1,15 @@
+{
+  "name": "Doseline — Medication Tracker",
+  "short_name": "Doseline",
+  "description": "Track prescriptions, dose reminders, refills, tapers and side effects.",
+  "start_url": "./#today",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#273E47",
+  "theme_color": "#A1CDA8",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}
