@@ -394,3 +394,17 @@ dialog h2 { margin-bottom: 12px; }
 .scanned { border-color: var(--celadon) !important; box-shadow: 0 0 0 2px rgba(161, 205, 168, .35); }
 .seg.scanned { border-radius: 999px; }
 .scan-progress .progress > span { background: var(--celadon); }
+
+/* ---------- Welcome (home screen) ---------- */
+.welcome {
+  position: relative; margin: 0 0 22px; padding: 18px 48px 18px 18px;
+  border-radius: var(--radius); background: rgba(161, 205, 168, .12);
+  border: 1px solid rgba(161, 205, 168, .45); border-left: 5px solid var(--celadon);
+}
+.welcome h2 { font-size: clamp(1.35rem, 4.5vw, 1.7rem); margin: 0 0 6px; color: var(--celadon); }
+.welcome p { margin: 0; max-width: 62ch; }
+.welcome-close {
+  position: absolute; top: 8px; right: 8px; width: 36px; height: 36px; border: 0; border-radius: 50%;
+  background: transparent; color: var(--muted); font-size: 1.4rem; line-height: 1; cursor: pointer;
+}
+.welcome-close:hover { color: var(--linen); background: rgba(243, 233, 220, .08); }

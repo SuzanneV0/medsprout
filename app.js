@@ -442,10 +442,21 @@ document.addEventListener('click', e => {
   else if (act === 'delete-effect') { state.sideEffects = state.sideEffects.filter(x => x.id !== id); save(); render(); }
   else if (act === 'notify') enableNotifications();
   else if (act === 'view-person') { state.viewing = id; save(); render(); }
+  else if (act === 'hide-welcome') { state.settings.hideWelcome = true; save(); render(); toast('Welcome message hidden. You can turn it back on in Settings.'); }
   else if (act === 'add-person') personModal();
   else if (act === 'rename-person') personModal(id);
   else if (act === 'delete-person') deletePerson(id);
 });
+
+/* ---------- welcome (top of the home screen) ---------- */
+function welcomeBanner() {
+  if (state.settings.hideWelcome) return '';
+  return `<section class="welcome" aria-labelledby="welcomeTitle">
+    <button class="welcome-close" data-act="hide-welcome" aria-label="Hide welcome message">×</button>
+    <h2 id="welcomeTitle">Welcome to Medsprout</h2>
+    <p>Medsprout helps you take your medications the right way, with dose reminders, refill alerts, taper schedules and a side-effect log for you and your family. Everything stays private on your device.</p>
+  </section>`;
+}
 
 /* ---------- family members: switcher, add/rename, delete ---------- */
 function personSwitcher() {
@@ -516,7 +527,9 @@ function render() {
   const app = $('#app');
   const views = { today: viewToday, meds: viewMeds, med: () => viewMedForm(arg), tapers: viewTapers, effects: viewEffects, history: viewHistory, settings: viewSettings };
   const withSwitcher = ['today', 'meds', 'tapers', 'effects', 'history'].includes(view) || !views[view] && !LEGAL_PAGES[view];
-  app.innerHTML = LEGAL_PAGES[view] ? viewLegal(view) : (withSwitcher ? personSwitcher() : '') + (views[view] || viewToday)();
+  const isHome = view === 'today' || !views[view] && !LEGAL_PAGES[view];
+  app.innerHTML = LEGAL_PAGES[view] ? viewLegal(view)
+    : (isHome ? welcomeBanner() : '') + (withSwitcher ? personSwitcher() : '') + (views[view] || viewToday)();
   document.title = LEGAL_PAGES[view] ? `${LEGAL_PAGES[view].title} · Medsprout` : 'Medsprout';
   if (view === 'med') bindMedForm(arg);
   if (view === 'effects') bindEffectForm();
@@ -1204,6 +1217,9 @@ function viewSettings() {
       }).join('')}</ul>
       <button type="button" class="btn sm" data-act="add-person">+ Add family member</button>
     </fieldset>
+    <fieldset><legend>Home screen</legend>
+      <label class="check"><input type="checkbox" name="showWelcome" ${state.settings.hideWelcome ? '' : 'checked'}> Show the “Welcome to Medsprout” message</label>
+    </fieldset>
     <fieldset><legend>Reminders</legend>
       <p>Notifications: <strong>${perm}</strong></p>
       <div class="row">${'Notification' in window && Notification.permission !== 'denied' ? `<button type="button" class="btn sm" data-act="notify">${canNotify() ? 'Re-check permission' : 'Turn on notifications'}</button>` : ''}
@@ -1233,6 +1249,11 @@ function bindSettings() {
   form.addEventListener('change', e => {
     if (e.target.name === 'graceMin' || e.target.name === 'refillWindowDays') {
       state.settings[e.target.name] = num(e.target.value);
+      save();
+      toast('Saved.', 'success');
+    }
+    if (e.target.name === 'showWelcome') {
+      state.settings.hideWelcome = !e.target.checked;
       save();
       toast('Saved.', 'success');
     }
