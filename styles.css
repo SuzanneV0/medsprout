@@ -215,7 +215,15 @@ input:focus, select:focus, textarea:focus { border-color: var(--celadon); outlin
 textarea { min-height: 84px; resize: vertical; }
 input[type="range"] { accent-color: var(--caramel); border: 0; padding: 0; background: transparent; }
 input[type="checkbox"], input[type="radio"] { width: 20px; height: 20px; min-height: 0; accent-color: var(--celadon); }
-fieldset { border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; margin: 0 0 18px; background: var(--surface); }
+/* min-width: 0 — fieldsets otherwise grow to fit their widest child instead of letting it shrink. */
+fieldset { border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; margin: 0 0 18px; background: var(--surface); min-width: 0; }
+.field, .inline-fields > * { min-width: 0; }
+input, select, textarea { min-width: 0; max-width: 100%; }
+/* iOS Safari gives date/time inputs a fixed native width that ignores width: 100%; drop the native styling so they fit their column. */
+input[type="time"], input[type="date"], input[type="datetime-local"] {
+  -webkit-appearance: none; appearance: none; display: block; text-align: left;
+}
+input::-webkit-date-and-time-value { text-align: left; }
 fieldset legend { font-family: var(--font-head); font-weight: 400; font-size: 1.1rem; padding: 0 6px; }
 .inline-fields { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); }
 .seg { display: flex; flex-wrap: wrap; gap: 6px; }
