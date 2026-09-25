@@ -198,7 +198,7 @@ function load() {
   return defaults();
 }
 function save() {
-  try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); }
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); if (Native.on) Native.queueReschedule(); }
   catch (e) { toast('Could not save — storage is unavailable in this browser.', 'danger'); }
 }
 const getMed = id => state.meds.find(m => m.id === id);
@@ -452,10 +452,12 @@ function snoozeDose(key, minutes = 10) {
    Notifications & the reminder loop
    ========================================================= */
 
-const canNotify = () => 'Notification' in window && Notification.permission === 'granted' && state.settings.notifications;
+/** 'granted' | 'denied' | 'default' | 'unsupported', from the browser or (in the phone app) the operating system. */
+const notifPermission = () => (Native.on ? Native.permission : 'Notification' in window ? Notification.permission : 'unsupported');
+const canNotify = () => notifPermission() === 'granted' && state.settings.notifications;
 
 async function sysNotify(title, body, tag, slotKey) {
-  if (!canNotify()) return;
+  if (!canNotify() || Native.on) return;
   const opts = { body, tag, icon: 'icon.svg', badge: 'icon.svg', renotify: true, data: { slot: slotKey } };
   try {
     const reg = navigator.serviceWorker && await navigator.serviceWorker.getRegistration();
@@ -788,13 +790,21 @@ function weekStrip(meds = state.meds) {
 }
 
 function notifBanner() {
-  if (!('Notification' in window)) return '';
+  if (notifPermission() === 'unsupported') return '';
   if (canNotify()) return '<span class="chip">🔔 Reminders on</span>';
-  if (Notification.permission === 'denied') return '<span class="chip" title="Allow notifications for this site in your browser settings">🔕 Notifications blocked</span>';
+  if (notifPermission() === 'denied') return '<span class="chip" title="Allow notifications for this site in your browser settings">🔕 Notifications blocked</span>';
   return '<button class="btn ghost sm" data-act="notify">🔔 Turn on reminders</button>';
 }
 
 async function enableNotifications() {
+  if (Native.on) {
+    const p = await Native.requestPermission();
+    state.settings.notifications = p === 'granted';
+    save();
+    toast(p === 'granted' ? 'Reminders are on. They will arrive even when Medsprout is closed.' : 'Notifications were not allowed. You can allow them in your phone settings.', p === 'granted' ? 'success' : 'warn', 6000);
+    render();
+    return;
+  }
   if (!('Notification' in window)) { toast('This browser does not support notifications. On iPhone, add Medsprout to your Home Screen first.', 'warn', 6000); return; }
   const p = await Notification.requestPermission();
   state.settings.notifications = p === 'granted';
@@ -1365,7 +1375,7 @@ function viewLegal(key) {
 /* ---------- Settings ---------- */
 function viewSettings() {
   const s = state.settings;
-  const perm = !('Notification' in window) ? 'Not supported in this browser' : Notification.permission === 'granted' ? (s.notifications ? 'On' : 'Allowed, but turned off') : Notification.permission === 'denied' ? 'Blocked — allow it in your browser settings' : 'Off';
+  const perm = notifPermission() === 'unsupported' ? 'Not supported in this browser' : notifPermission() === 'granted' ? (s.notifications ? 'On' : 'Allowed, but turned off') : notifPermission() === 'denied' ? (Native.on ? 'Blocked — allow it in your phone settings' : 'Blocked — allow it in your browser settings') : 'Off';
   return `<div class="page-head"><div><h1>Settings</h1></div></div>
   <form id="settingsForm">
     <fieldset><legend>Family members</legend>
@@ -1383,7 +1393,8 @@ function viewSettings() {
     </fieldset>
     <fieldset><legend>Reminders</legend>
       <p>Notifications: <strong>${perm}</strong></p>
-      <div class="row">${'Notification' in window && Notification.permission !== 'denied' ? `<button type="button" class="btn sm" data-act="notify">${canNotify() ? 'Re-check permission' : 'Turn on notifications'}</button>` : ''}
+      ${Native.on && Native.exactAlarm !== 'granted' ? `<p class="help">For on-time reminders, allow Medsprout to set alarms. <button type="button" class="linkish" id="exactAlarms">Allow alarms</button></p>` : ''}
+      <div class="row">${!['unsupported', 'denied'].includes(notifPermission()) ? `<button type="button" class="btn sm" data-act="notify">${canNotify() ? 'Re-check permission' : 'Turn on notifications'}</button>` : ''}
         ${canNotify() ? `<button type="button" class="btn ghost sm" id="testNotif">Send a test</button><button type="button" class="btn ghost sm" id="notifOff">Turn off</button>` : ''}</div>
       <div class="field" style="margin-top:14px"><label for="s-grace">Mark a dose as missed after</label>
         <select id="s-grace" name="graceMin">${[15, 30, 45, 60, 90, 120].map(v => `<option value="${v}" ${num(s.graceMin) === v ? 'selected' : ''}>${v} minutes</option>`).join('')}</select></div>
@@ -1543,8 +1554,10 @@ function bindSettings() {
       toast('Saved.', 'success');
     }
   });
+  const exact = $('#exactAlarms');
+  if (exact) exact.addEventListener('click', async () => { await Native.allowExactAlarms(); render(); });
   const test = $('#testNotif');
-  if (test) test.addEventListener('click', () => sysNotify('Medsprout test', 'Reminders are working. 💊', 'test'));
+  if (test) test.addEventListener('click', () => (Native.on ? Native.test() : sysNotify('Medsprout test', 'Reminders are working. 💊', 'test')));
   const off = $('#notifOff');
   if (off) off.addEventListener('click', () => { state.settings.notifications = false; save(); render(); });
   $('#exportBtn').addEventListener('click', exportBackup);
@@ -1586,7 +1599,7 @@ function confirmImport(parsed) {
 
 window.addEventListener('hashchange', () => { setMenu(false); render(); window.scrollTo(0, 0); $('#app').focus({ preventScroll: true }); });
 
-if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+if ('serviceWorker' in navigator && location.protocol.startsWith('http') && !Native.on) {
   navigator.serviceWorker.register('sw.js').catch(() => {});
   navigator.serviceWorker.addEventListener('message', e => {
     const d = e.data || {};
@@ -1619,7 +1632,7 @@ if (location.search) history.replaceState(null, '', location.pathname + location
    reloading. Compare the server's fingerprints (ETags) of the app's files with the
    ones seen at start-up, and offer a refresh when they change. HEAD requests skip
    the service worker, so this sees what's really live. */
-const APP_FILES = ['./', 'app.js', 'pills.js', 'scan.js', 'legal.js', 'styles.css'];
+const APP_FILES = ['./', 'app.js', 'native.js', 'pills.js', 'scan.js', 'legal.js', 'styles.css'];
 let appFingerprint = null;
 async function fingerprint() {
   try {
@@ -1629,7 +1642,7 @@ async function fingerprint() {
   } catch (e) { return null; } // offline: try again later
 }
 async function checkForUpdate() {
-  if (!location.protocol.startsWith('http') || $('#updateBar')) return;
+  if (!location.protocol.startsWith('http') || Native.on || $('#updateBar')) return;
   const now = await fingerprint();
   if (!now) return;
   if (appFingerprint === null) { appFingerprint = now; return; }
@@ -1647,6 +1660,7 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) { ti
 render();
 tick();
 consumePendingAction();
+if (Native.on) Native.start();
 setInterval(tick, 20000);
 checkForUpdate();
 setInterval(checkForUpdate, 30 * 60000);

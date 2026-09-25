@@ -1,0 +1,14 @@
+{
+  "appId": "app.medsprout",
+  "appName": "Medsprout",
+  "webDir": "www",
+  "android": {
+    "backgroundColor": "#273E47"
+  },
+  "plugins": {
+    "LocalNotifications": {
+      "smallIcon": "ic_stat_medsprout",
+      "iconColor": "#A1CDA8"
+    }
+  }
+}
