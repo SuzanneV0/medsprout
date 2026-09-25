@@ -1,0 +1,3 @@
+# Android build scripts must keep their native line endings on every OS.
+native/android/gradlew text eol=lf
+native/android/gradlew.bat text eol=crlf
