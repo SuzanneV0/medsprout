@@ -999,6 +999,12 @@ function viewMedForm(id) {
     </fieldset>
 
     <div class="notice" role="note">
+      <strong>ℹ️ Medsprout does not give medical advice.</strong>
+      All dose times, re-spaced doses, refill dates and taper steps are calculated only from the instructions you enter here.
+      Check them against your prescription label, and ask your prescriber or pharmacist if you're unsure.
+    </div>
+
+    <div class="notice" role="note">
       <strong>🔒 Your data stays on this device.</strong>
       Everything you enter is stored locally, in this browser on this device. It is never sent to or stored by Medsprout.
       Clearing your browser data or uninstalling the app will delete it, so use <em>Settings → Export backup</em> to keep a copy.
@@ -1182,7 +1188,8 @@ function bindMedForm(id) {
       ? `<span class="error">That many doses won't fit in 24 hours at this spacing.</span>`
       : `<strong>${times.length} dose${times.length === 1 ? '' : 's'} a day</strong>${times.length > 1 ? `, at least ${fmtHours(gap)} apart` : ''}.
          <div class="row">${times.map(t => `<span class="time-chip">${fmtMin(t)}</span>`).join('')}</div>
-         <p class="help" style="margin:8px 0 0">If you take a dose late, the rest of that day's doses shift so they stay ${times.length > 1 ? fmtHours(gap) : 'properly'} apart.</p>`;
+         <p class="help" style="margin:8px 0 0">If you take a dose late, the rest of that day's doses shift so they stay ${times.length > 1 ? fmtHours(gap) : 'properly'} apart.</p>
+         <p class="help" style="margin:6px 0 0">These times come only from the instructions you entered. They are not medical advice.</p>`;
     $('#taperFields').hidden = !m.taper.enabled;
     if (m.taper.enabled) {
       const steps = taperSteps(m);

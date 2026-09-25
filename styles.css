@@ -437,3 +437,4 @@ dialog h2 { margin-bottom: 12px; }
 .backup-card { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin-bottom: 18px; border-color: rgba(243, 233, 220, .28); }
 .backup-card > div:first-child { flex: 1 1 240px; }
 .backup-card p { margin: 4px 0 0; }
+.footer-disclaimer { max-width: 60ch; margin: 0 auto 6px !important; line-height: 1.5; }
