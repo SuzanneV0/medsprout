@@ -161,6 +161,7 @@ function sanitizeState(raw) {
     refillWindowDays: V.int(s.refillWindowDays, 1, 30, d.settings.refillWindowDays),
     notifications: s.notifications === true,
     hideWelcome: s.hideWelcome === true,
+    privateReminders: s.privateReminders === true,
     persistAsked: s.persistAsked === true,
     lastBackup: V.num(s.lastBackup, 0, 1e14, 0),
     backupNudgeAfter: V.num(s.backupNudgeAfter, 0, 1e14, 0),
@@ -467,12 +468,39 @@ async function sysNotify(title, body, tag, slotKey) {
   } catch (e) { /* notifications are best-effort */ }
 }
 
-function notifyOnce(key, title, body, level, slotKey) {
+/**
+ * All reminder wording in one place (used by the web app and the native scheduler).
+ * `title/body` are shown inside the app; `lockTitle/lockBody` go to the system notification,
+ * which leaves out medication and family names when "Hide medication names" is on.
+ */
+function reminderMessage(kind, { med, slot, lead, r } = {}) {
+  const pills = slot ? `Take ${fmtPills(slot.pills)}${med.strength ? ` (${med.strength})` : ''}.` : '';
+  const full = {
+    pre: () => [`${medLabel(med)} in ${lead} min`, `${pills} Due at ${fmtMin(slot.clock)}.`],
+    due: () => [`Time to take ${medLabel(med)}`, `${pills} ${med.instructions || ''}`.trim()],
+    missed: () => [`Missed dose: ${medLabel(med)}`, `It was due at ${fmtMin(slot.clock)}. Take it now or skip it and your next dose will be re-spaced.`],
+    snooze: () => [`Reminder: ${medLabel(med)}`, pills],
+    'refill-out': () => [`${medLabel(med)} needs a refill`, "You don't have enough pills for today's doses. Refill your prescription."],
+    'refill-soon': () => [`Refill ${medLabel(med)} soon`, `About ${r.days} day${r.days === 1 ? '' : 's'} left — runs out ${fmtDate(r.runOut)}.`],
+  }[kind]();
+  const hidden = {
+    pre: [`Medication reminder`, `A dose is due in ${lead} minutes. Open Medsprout for details.`],
+    due: ['Time for a dose', 'Open Medsprout to see which medication.'],
+    missed: ['A dose was missed', 'Open Medsprout to take it or skip it.'],
+    snooze: ['Medication reminder', 'Open Medsprout for details.'],
+    'refill-out': ['A refill is needed', 'Open Medsprout for details.'],
+    'refill-soon': ['A refill is due soon', 'Open Medsprout for details.'],
+  }[kind];
+  const lock = state.settings.privateReminders ? hidden : full;
+  return { title: full[0], body: full[1], lockTitle: lock[0], lockBody: lock[1] };
+}
+
+function notifyOnce(key, msg, level, slotKey) {
   if (state.notified[key]) return;
   state.notified[key] = Date.now();
   save();
-  toast(`${title} — ${body}`, level, 7000);
-  sysNotify(title, body, key, slotKey);
+  toast(`${msg.title} — ${msg.body}`, level, 7000);
+  sysNotify(msg.lockTitle, msg.lockBody, key, slotKey);
 }
 
 function tick() {
@@ -482,27 +510,26 @@ function tick() {
   for (const slot of [...allSlots(k), ...soon]) {
     const med = slot.med, st = slotStatus(slot);
     const rem = med.reminder || { enabled: true, leadMin: 0 };
-    const pillsTxt = `Take ${fmtPills(slot.pills)}${med.strength ? ` (${med.strength})` : ''}.`;
     if (!slot.rec && rem.enabled) {
       const lead = num(rem.leadMin);
       const minsUntil = (slot.at - now) / 60000;
       if (lead > 0 && minsUntil <= lead && minsUntil > 0)
-        notifyOnce(`${slot.key}|pre`, `${medLabel(med)} in ${lead} min`, `${pillsTxt} Due at ${fmtMin(slot.clock)}.`, '', slot.key);
+        notifyOnce(`${slot.key}|pre`, reminderMessage('pre', { med, slot, lead }), '', slot.key);
       if (st === 'due')
-        notifyOnce(`${slot.key}|due|${Math.round(slot.time)}`, `Time to take ${medLabel(med)}`, `${pillsTxt} ${med.instructions ? med.instructions : ''}`.trim(), '', slot.key);
+        notifyOnce(`${slot.key}|due|${Math.round(slot.time)}`, reminderMessage('due', { med, slot }), '', slot.key);
     }
     if (st === 'missed' && !slot.rec)
-      notifyOnce(`${slot.key}|missed|${Math.round(slot.time)}`, `Missed dose: ${medLabel(med)}`, `It was due at ${fmtMin(slot.clock)}. Take it now or skip it and your next dose will be re-spaced.`, 'danger', slot.key);
+      notifyOnce(`${slot.key}|missed|${Math.round(slot.time)}`, reminderMessage('missed', { med, slot }), 'danger', slot.key);
     const sz = state.snoozes[slot.key];
     if (sz && now >= sz && !slot.rec) {
       delete state.snoozes[slot.key];
-      notifyOnce(`${slot.key}|snooze|${sz}`, `Reminder: ${medLabel(med)}`, pillsTxt, st === 'missed' ? 'danger' : '', slot.key);
+      notifyOnce(`${slot.key}|snooze|${sz}`, reminderMessage('snooze', { med, slot }), st === 'missed' ? 'danger' : '', slot.key);
     }
   }
   for (const med of state.meds) {
     const r = refillStatus(med);
-    if (r.level === 'out') notifyOnce(`refill-out|${med.id}|${k}`, `${medLabel(med)} needs a refill`, `You don't have enough pills for today's doses. Refill your prescription.`, 'danger');
-    else if (r.level === 'soon') notifyOnce(`refill-soon|${med.id}|${k}`, `Refill ${medLabel(med)} soon`, `About ${r.days} day${r.days === 1 ? '' : 's'} left — runs out ${fmtDate(r.runOut)}.`, 'warn');
+    if (r.level === 'out') notifyOnce(`refill-out|${med.id}|${k}`, reminderMessage('refill-out', { med }), 'danger');
+    else if (r.level === 'soon') notifyOnce(`refill-soon|${med.id}|${k}`, reminderMessage('refill-soon', { med, r }), 'warn');
   }
   // prune old notification keys (> 3 days)
   const cutoff = now - 3 * 86400000;
@@ -1360,6 +1387,8 @@ function viewSettings() {
         ${canNotify() ? `<button type="button" class="btn ghost sm" id="testNotif">Send a test</button><button type="button" class="btn ghost sm" id="notifOff">Turn off</button>` : ''}</div>
       <div class="field" style="margin-top:14px"><label for="s-grace">Mark a dose as missed after</label>
         <select id="s-grace" name="graceMin">${[15, 30, 45, 60, 90, 120].map(v => `<option value="${v}" ${num(s.graceMin) === v ? 'selected' : ''}>${v} minutes</option>`).join('')}</select></div>
+      <label class="check"><input type="checkbox" name="privateReminders" ${s.privateReminders ? 'checked' : ''}> Hide medication names in notifications</label>
+      <p class="help" style="margin:4px 0 0 30px">Notifications on your lock screen will say “Time for a dose” without naming the medication or the person it’s for. Details still show inside the app.</p>
     </fieldset>
     <fieldset><legend>Refills</legend>
       <div class="field"><label for="s-window">Warn me when a prescription will run out within</label>
@@ -1400,8 +1429,42 @@ function backupReminder() {
     <div class="row"><button class="btn sm" data-act="backup-now">Export backup</button><button class="btn ghost sm" data-act="backup-later">Later</button></div></div>`;
 }
 
-function exportBackup() {
-  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+/* ---------- backups (optionally password-protected) ----------
+   AES-256-GCM with a key from PBKDF2-SHA-256 (600,000 iterations, random salt), all in the
+   browser's Web Crypto. The password is never stored; a forgotten password can't be recovered. */
+const BACKUP_KDF_ITERATIONS = 600000;
+const toB64 = buf => { const b = new Uint8Array(buf); let s = ''; for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode(...b.subarray(i, i + 0x8000)); return btoa(s); };
+const fromB64 = str => Uint8Array.from(atob(str), c => c.charCodeAt(0));
+
+async function backupKey(password, salt, iterations) {
+  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+}
+async function encryptBackup(data, password) {
+  const salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12));
+  const key = await backupKey(password, salt, BACKUP_KDF_ITERATIONS);
+  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(JSON.stringify(data)));
+  return { format: 'medsprout-backup', version: 2, encrypted: true,
+    kdf: { name: 'PBKDF2', hash: 'SHA-256', iterations: BACKUP_KDF_ITERATIONS, salt: toB64(salt) },
+    cipher: { name: 'AES-GCM', iv: toB64(iv) }, data: toB64(ct) };
+}
+const isEncryptedBackup = f => V.obj(f) && f.format === 'medsprout-backup' && f.encrypted === true;
+/** Throws 'password' for a wrong password or tampered file, 'format' for anything malformed. */
+async function decryptBackup(f, password) {
+  const it = f.kdf && f.kdf.iterations;
+  if (!f.kdf || f.kdf.name !== 'PBKDF2' || f.kdf.hash !== 'SHA-256' || !Number.isInteger(it) || it < 100000 || it > 5000000
+    || !f.cipher || f.cipher.name !== 'AES-GCM' || typeof f.kdf.salt !== 'string' || typeof f.cipher.iv !== 'string' || typeof f.data !== 'string') throw new Error('format');
+  let salt, iv, ct;
+  try { salt = fromB64(f.kdf.salt); iv = fromB64(f.cipher.iv); ct = fromB64(f.data); } catch (e) { throw new Error('format'); }
+  if (salt.length !== 16 || iv.length !== 12) throw new Error('format');
+  const key = await backupKey(password, salt, it);
+  let plain;
+  try { plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct); } catch (e) { throw new Error('password'); }
+  return JSON.parse(new TextDecoder().decode(plain));
+}
+
+function downloadJson(obj) {
+  const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = `medsprout-backup-${dayKey()}.json`;
@@ -1409,6 +1472,53 @@ function exportBackup() {
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   state.settings.lastBackup = Date.now();
   save();
+}
+
+function exportBackup() {
+  openModal(`<form id="exportForm"><h2>Export backup</h2>
+    <p class="help">Your backup contains your medications and health notes. Protecting it with a password keeps it private if the file is shared or lost.</p>
+    <label class="check"><input type="checkbox" name="protect" checked> Protect with a password (recommended)</label>
+    <div id="pwFields" style="margin-top:12px">
+      <div class="field"><label for="bk-pw">Password</label><input id="bk-pw" name="pw" type="password" autocomplete="new-password"></div>
+      <div class="field"><label for="bk-pw2">Confirm password</label><input id="bk-pw2" name="pw2" type="password" autocomplete="new-password"></div>
+      <p class="help">At least 8 characters. <strong>If you forget it, this backup can\u2019t be opened</strong>: Medsprout never sees or stores your password and can\u2019t recover it.</p>
+    </div>
+    <p class="error" id="exportError" role="alert"></p>
+    <div class="row"><button class="btn" id="exportGo">Export</button><button type="button" class="btn ghost" data-close>Cancel</button></div></form>`,
+  fd => {
+    const protect = !!fd.get('protect'), pw = String(fd.get('pw') || ''), err = $('#exportError');
+    if (!protect) { downloadJson(state); toast('Backup exported.', 'success'); render(); return; }
+    if (pw.length < 8) { err.textContent = 'Use at least 8 characters.'; return false; }
+    if (pw !== fd.get('pw2')) { err.textContent = 'The passwords don\u2019t match.'; return false; }
+    err.textContent = '';
+    const go = $('#exportGo'); go.disabled = true; go.textContent = 'Encrypting\u2026';
+    encryptBackup(state, pw)
+      .then(f => { downloadJson(f); modal.close(); toast('Password-protected backup exported.', 'success'); render(); })
+      .catch(() => { err.textContent = 'Couldn\u2019t encrypt the backup on this browser.'; go.disabled = false; go.textContent = 'Export'; });
+    return false; // the dialog closes itself when encryption finishes
+  });
+  const box = $('[name="protect"]', modal);
+  box.addEventListener('change', () => { $('#pwFields').hidden = !box.checked; });
+}
+
+/** Ask for a backup's password, decrypt it, then hand the contents to `onData`. */
+function askBackupPassword(f, onData) {
+  openModal(`<form><h2>Password-protected backup</h2>
+    <div class="field"><label for="bk-open">Backup password</label><input id="bk-open" name="pw" type="password" autocomplete="off" required></div>
+    <p class="error" id="openError" role="alert"></p>
+    <div class="row"><button class="btn" id="openGo">Unlock</button><button type="button" class="btn ghost" data-close>Cancel</button></div></form>`,
+  fd => {
+    const err = $('#openError'), go = $('#openGo');
+    go.disabled = true; go.textContent = 'Unlocking\u2026'; err.textContent = '';
+    decryptBackup(f, String(fd.get('pw') || ''))
+      .then(data => { modal.close(); onData(data); })
+      .catch(e => {
+        err.textContent = e.message === 'password' ? 'That password didn\u2019t work. Check it and try again.' : 'This backup file is damaged and can\u2019t be opened.';
+        go.disabled = false; go.textContent = 'Unlock';
+      });
+    return false;
+  });
+  setTimeout(() => { const i = $('#bk-open', modal); if (i) i.focus(); }, 50);
 }
 
 function bindSettings() {
@@ -1421,6 +1531,11 @@ function bindSettings() {
       state.settings[e.target.name] = num(e.target.value);
       save();
       toast('Saved.', 'success');
+    }
+    if (e.target.name === 'privateReminders') {
+      state.settings.privateReminders = e.target.checked;
+      save();
+      toast(e.target.checked ? 'Notifications will no longer show medication names.' : 'Notifications will show medication names.', 'success');
     }
     if (e.target.name === 'showWelcome') {
       state.settings.hideWelcome = !e.target.checked;
@@ -1438,9 +1553,20 @@ function bindSettings() {
     e.target.value = '';
     if (!f) return;
     if (f.size > 5 * 1024 * 1024) { toast('That file is too large to be a Medsprout backup.', 'danger'); return; }
+    let parsed;
+    try { parsed = JSON.parse(await f.text()); } catch (err) { toast('That file is not a Medsprout backup.', 'danger'); return; }
+    if (isEncryptedBackup(parsed)) askBackupPassword(parsed, confirmImport);
+    else confirmImport(parsed);
+  });
+  $('#resetBtn').addEventListener('click', () => confirmBox('Erase all data?', 'This deletes every medication, dose record and side-effect note on this device. Export a backup first if you might need it.', 'Erase everything', true, () => {
+    state = defaults(); save(); toast('All data erased.'); location.hash = '#today'; render();
+  }));
+}
+
+/** Validate a (decrypted) backup and ask before replacing everything on this device. */
+function confirmImport(parsed) {
     let result;
     try {
-      const parsed = JSON.parse(await f.text());
       if (!V.obj(parsed) || !Array.isArray(parsed.meds)) throw new Error('bad file');
       result = sanitizeState(parsed);
     } catch (err) { toast('That file is not a Medsprout backup.', 'danger'); return; }
@@ -1452,10 +1578,6 @@ function bindSettings() {
         state = data;
         save(); toast('Backup imported.', 'success'); render();
       });
-  });
-  $('#resetBtn').addEventListener('click', () => confirmBox('Erase all data?', 'This deletes every medication, dose record and side-effect note on this device. Export a backup first if you might need it.', 'Erase everything', true, () => {
-    state = defaults(); save(); toast('All data erased.'); location.hash = '#today'; render();
-  }));
 }
 
 /* =========================================================
@@ -1475,15 +1597,22 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   });
 }
 
-// Actions arriving from a notification when the app was closed (?action=take&slot=…)
-(function handleLaunchAction() {
-  const p = new URLSearchParams(location.search);
-  const slot = p.get('slot'), action = p.get('action');
-  if (slot && action) {
-    history.replaceState(null, '', location.pathname + '#today');
+// Actions from a notification tapped while the app was closed: the service worker leaves them in
+// a private cache (never the URL, so links can't trigger them). Only recent ones are honoured.
+async function consumePendingAction() {
+  if (!('caches' in window)) return;
+  try {
+    const cache = await caches.open('medsprout-pending');
+    const res = await cache.match('pending-action');
+    if (!res) return;
+    await cache.delete('pending-action');
+    const { action, slot, at } = await res.json();
+    if (typeof slot !== 'string' || Date.now() - at > 10 * 60000) return;
     if (action === 'take') takeDose(slot); else if (action === 'snooze') snoozeDose(slot);
-  }
-})();
+  } catch (e) { /* nothing pending */ }
+}
+// Older versions put actions in the URL; ignore and tidy those away.
+if (location.search) history.replaceState(null, '', location.pathname + location.hash);
 
 /* ---------- update check ----------
    Installed apps (especially on iPhone) resume an old copy from memory instead of
@@ -1517,6 +1646,7 @@ if (state.meds.length) requestPersistentStorage();
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { tick(); checkForUpdate(); } });
 render();
 tick();
+consumePendingAction();
 setInterval(tick, 20000);
 checkForUpdate();
 setInterval(checkForUpdate, 30 * 60000);

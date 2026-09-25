@@ -122,7 +122,8 @@ const LEGAL_PAGES = {
       <p>If you turn on reminders, your device creates and shows the notifications itself. We don’t use a push-notification server, and no reminder content is sent to us.</p>
 
       <h2>5. Backups you export</h2>
-      <p>If you use <em>Settings → Export backup</em>, a file containing your information is saved wherever you choose. You control that file. It may contain sensitive health information, so store and share it carefully.</p>
+      <p>If you use <em>Settings → Export backup</em>, a file containing your information is saved wherever you choose. You control that file. It contains sensitive health information, so store and share it carefully.</p>
+      <p>You can protect a backup with a password (recommended). The file is then encrypted on your device with AES-256, and it can only be opened with that password. Medsprout never sees or stores your password, so a forgotten password can’t be recovered. A backup exported without a password is readable by anyone who has the file.</p>
 
       <h2>6. What we don’t do</h2>
       <ul>
