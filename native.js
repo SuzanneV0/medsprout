@@ -109,8 +109,12 @@ const Native = (() => {
   api.test = () => LN.schedule({ notifications: [{ id: 1, title: 'Medsprout test', body: 'Reminders are working, even when the app is closed. 💊', schedule: { at: new Date(Date.now() + 2000), allowWhileIdle: true }, channelId: 'doses' }] });
 
   api.start = async () => {
+    // Notification channels exist only on Android; keep that separate so iOS still gets its buttons.
+    if (api.platform === 'android') {
+      try { await LN.createChannel({ id: 'doses', name: 'Dose reminders', description: 'Medication reminders and refill warnings', importance: 5, visibility: 1, vibration: true }); }
+      catch (e) { /* the default channel is used instead */ }
+    }
     try {
-      await LN.createChannel({ id: 'doses', name: 'Dose reminders', description: 'Medication reminders and refill warnings', importance: 5, visibility: 1, vibration: true });
       await LN.registerActionTypes({ types: [{ id: 'dose', actions: [{ id: 'take', title: 'Mark taken' }, { id: 'snooze', title: 'Snooze 10 min' }] }] });
       await LN.addListener('localNotificationActionPerformed', ({ actionId, notification }) => {
         const slot = notification && notification.extra && notification.extra.slot;

@@ -4,13 +4,17 @@
   "description": "Medsprout as an installed phone app (Capacitor). The website lives in the repository root; this folder wraps it.",
   "scripts": {
     "copy-web": "node scripts/copy-web.mjs",
-    "sync": "npm run copy-web && npx cap sync android",
+    "icons": "node scripts/make-android-icons.js && node scripts/make-ios-icons.js",
+    "sync": "npm run copy-web && npx cap sync",
+    "sync:android": "npm run copy-web && npx cap sync android",
+    "sync:ios": "npm run copy-web && npx cap sync ios",
     "open:android": "npx cap open android",
-    "build:android": "npm run sync && cd android && gradlew assembleDebug"
+    "open:ios": "npx cap open ios"
   },
   "dependencies": {
     "@capacitor/android": "8.5.2",
     "@capacitor/core": "8.5.2",
+    "@capacitor/ios": "8.5.2",
     "@capacitor/local-notifications": "8.3.1"
   },
   "devDependencies": {
