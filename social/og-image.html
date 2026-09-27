@@ -1,0 +1,61 @@
+<!doctype html>
+<!--
+  Source for ../og-image.png, the 1200×630 image shown when medsprout.app is shared.
+  Regenerate (from the repository root):
+    "C:\Program Files\Google\Chrome\Application\chrome.exe" --headless=new --hide-scrollbars --force-device-scale-factor=1 --window-size=1200,630 --screenshot="%CD%\og-image.png" "file:///%CD:\=/%/social/og-image.html"
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Medsprout share image</title>
+<style>
+  @font-face { font-family: "Cal Sans"; src: url("../vendor/fonts/cal-sans-latin-400-normal.woff2") format("woff2"); }
+  @font-face { font-family: "Questrial"; src: url("../vendor/fonts/questrial-latin-400-normal.woff2") format("woff2"); }
+  :root { --cherry: #A4243B; --linen: #F3E9DC; --apricot: #D8973C; --caramel: #BD632F; --charcoal: #273E47; --celadon: #A1CDA8; }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { width: 1200px; height: 630px; overflow: hidden; }
+  body {
+    background:
+      radial-gradient(900px 520px at 88% 8%, rgba(161, 205, 168, .20), transparent 60%),
+      radial-gradient(700px 420px at 0% 100%, rgba(189, 99, 47, .16), transparent 60%),
+      var(--charcoal);
+    color: var(--linen); font-family: "Questrial", sans-serif;
+    display: grid; grid-template-rows: 1fr auto;
+  }
+  main { display: grid; grid-template-columns: 300px 1fr; gap: 64px; align-items: center; padding: 64px 80px 40px; }
+  .icon { width: 300px; height: 300px; border-radius: 68px; box-shadow: 0 0 0 3px rgba(161, 205, 168, .45), 0 30px 60px rgba(0, 0, 0, .35); }
+  h1 { font-family: "Cal Sans", sans-serif; font-weight: 400; font-size: 112px; line-height: 1; letter-spacing: -.5px; }
+  .tagline { font-size: 38px; line-height: 1.28; margin-top: 22px; max-width: 640px; }
+  .pills { display: flex; align-items: center; gap: 16px; margin-top: 34px; }
+  .pills svg { filter: drop-shadow(0 4px 6px rgba(0, 0, 0, .3)); }
+  footer {
+    display: flex; justify-content: space-between; align-items: center;
+    background: var(--celadon); color: var(--charcoal); padding: 26px 80px;
+    font-size: 30px;
+  }
+  footer .url { font-family: "Cal Sans", sans-serif; font-size: 40px; }
+</style>
+</head>
+<body>
+  <main>
+    <img class="icon" src="../icon-full.svg" alt="">
+    <div>
+      <h1>Medsprout</h1>
+      <p class="tagline">Medication reminders, refills and tapers for you and your family.</p>
+      <div class="pills" id="pills"></div>
+    </div>
+  </main>
+  <footer>
+    <span class="url">medsprout.app</span>
+    <span>Private: your data stays on your device</span>
+  </footer>
+  <script src="../pills.js"></script>
+  <script>
+    // A few of the app's own pill icons, including a gummy-bear vitamin.
+    document.getElementById('pills').innerHTML = [
+      { kind: 'med', color: 0 }, { kind: 'med', color: 7 }, { kind: 'med', color: 18 },
+      { kind: 'vitamin', color: 4 }, { kind: 'med', color: 2 }, { kind: 'med', color: 26 },
+    ].map(p => pillIcon(p, 64)).join('');
+  </script>
+</body>
+</html>
