@@ -1,7 +1,7 @@
 {
   "name": "Medsprout — Medication Tracker",
   "short_name": "Medsprout",
-  "description": "Track prescriptions, dose reminders, refills, tapers and side effects.",
+  "description": "Medication reminders, refill alerts, taper schedules and a side-effect log for you and your family. Private: everything stays on your device.",
   "start_url": "./#today",
   "scope": "./",
   "display": "standalone",
@@ -33,5 +33,13 @@
       "type": "image/svg+xml",
       "purpose": "any"
     }
+  ],
+  "id": "/",
+  "lang": "en",
+  "dir": "ltr",
+  "categories": [
+    "health",
+    "medical",
+    "lifestyle"
   ]
 }

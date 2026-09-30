@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Medsprout</title>
+  <title>Medsprout: Medication Reminders, Refill Alerts &amp; Pill Tracker</title>
   <meta name="description" content="Dose reminders, refill alerts, taper schedules and a side-effect log for you and your family. Private: everything stays on your device.">
   <link rel="canonical" href="https://www.medsprout.app/">
   <!-- Link previews (iMessage, WhatsApp, Slack, LinkedIn, Facebook, X…). Image source: social/og-image.html -->
@@ -25,6 +25,26 @@
   <meta name="apple-mobile-web-app-title" content="Medsprout">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="icon" href="icon-192.png" type="image/png" sizes="192x192">
+  <!-- Structured data for search engines (a data block, not a script: allowed by the CSP). -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "Medsprout",
+    "url": "https://www.medsprout.app/",
+    "description": "Medication reminders, refill alerts, taper schedules and a side-effect log for you and your family. Private: everything stays on your device.",
+    "applicationCategory": "HealthApplication",
+    "operatingSystem": "Any web browser; installable on iPhone and Android",
+    "browserRequirements": "Requires JavaScript",
+    "isAccessibleForFree": true,
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "CAD" },
+    "image": "https://www.medsprout.app/og-image.png",
+    "inLanguage": "en",
+    "featureList": ["Dose reminders", "Refill alerts", "Taper schedules", "Family members", "Scan a prescription label", "Side-effect log", "Password-protected backups"],
+    "publisher": { "@type": "Organization", "name": "Medsprout", "email": "medsproutapp@gmail.com", "url": "https://www.medsprout.app/" }
+  }
+  </script>
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <link rel="preload" href="vendor/fonts/cal-sans-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="vendor/fonts/questrial-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
@@ -54,7 +74,27 @@
     </nav>
   </header>
 
-  <main id="app" tabindex="-1"></main>
+  <main id="app" tabindex="-1">
+    <!-- Readable without JavaScript (search engines, link crawlers, screen readers before the app loads).
+         app.js replaces this with the app as soon as it starts. -->
+    <section class="intro">
+      <h1>Medsprout: medication reminders and pill tracker</h1>
+      <p>Medsprout helps you take your medications on schedule, with dose reminders, refill alerts, taper schedules and a side-effect log for you and your family. It’s free, works in any browser on your phone or computer, and can be installed to your Home Screen.</p>
+      <h2>What you can do with Medsprout</h2>
+      <ul>
+        <li><strong>Dose reminders</strong> spaced evenly through the day or every few hours, re-spaced automatically if you take a dose late.</li>
+        <li><strong>Refill alerts</strong> before a prescription runs out, based on the pills you have on hand.</li>
+        <li><strong>Taper schedules</strong> that step your dose down week by week and build it into your reminders.</li>
+        <li><strong>Family members</strong>, each with their own medications and reminders.</li>
+        <li><strong>Scan a label</strong> to fill in a prescription from a photo, read on your device.</li>
+        <li><strong>Side-effect log</strong> to share with your doctor or pharmacist.</li>
+      </ul>
+      <h2>Private by design</h2>
+      <p>No account and no cloud database. Your medications and notes are stored only on your device and are never sent to Medsprout.</p>
+      <p><small>Medsprout does not give medical advice. All dose times and schedules are based only on the instructions you enter.</small></p>
+      <noscript><p><strong>Medsprout needs JavaScript turned on to run.</strong></p></noscript>
+    </section>
+  </main>
 
   <footer class="site-footer">
     <nav aria-label="Legal">

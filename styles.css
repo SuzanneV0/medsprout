@@ -438,3 +438,10 @@ dialog h2 { margin-bottom: 12px; }
 .backup-card > div:first-child { flex: 1 1 240px; }
 .backup-card p { margin: 4px 0 0; }
 .footer-disclaimer { max-width: 60ch; margin: 0 auto 6px !important; line-height: 1.5; }
+
+/* ---------- Static intro (visible only before the app starts, or without JavaScript) ---------- */
+.intro { max-width: 70ch; }
+.intro h1 { margin-bottom: 12px; }
+.intro h2 { font-size: 1.2rem; margin: 24px 0 8px; }
+.intro ul { padding-left: 1.2em; }
+.intro li { margin-bottom: 6px; }

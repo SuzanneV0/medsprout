@@ -1,0 +1,5 @@
+# Medsprout: everything public may be crawled.
+User-agent: *
+Allow: /
+
+Sitemap: https://www.medsprout.app/sitemap.xml

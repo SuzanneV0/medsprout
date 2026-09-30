@@ -681,6 +681,10 @@ function deletePerson(id) {
 let currentView = 'today';
 let flashMedId = null;
 
+/** The page's own <title> (set in index.html for search engines) is used for the home screen. */
+const HOME_TITLE = document.title;
+const SCREEN_TITLES = { meds: 'Medications', med: 'Add or edit medication', tapers: 'Taper schedules', effects: 'Side effects', history: 'History', settings: 'Settings' };
+
 function render() {
   const [view, arg] = (location.hash.slice(1) || 'today').split('/');
   currentView = view;
@@ -691,7 +695,8 @@ function render() {
   const isHome = view === 'today' || !views[view] && !LEGAL_PAGES[view];
   app.innerHTML = LEGAL_PAGES[view] ? viewLegal(view)
     : (isHome ? welcomeBanner() : '') + (withSwitcher ? personSwitcher() : '') + (views[view] || viewToday)();
-  document.title = LEGAL_PAGES[view] ? `${LEGAL_PAGES[view].title} · Medsprout` : 'Medsprout';
+  const screenName = LEGAL_PAGES[view] ? LEGAL_PAGES[view].title : SCREEN_TITLES[view];
+  document.title = screenName ? `${screenName} · Medsprout` : HOME_TITLE; // home keeps the full, search-friendly title
   if (view === 'med') bindMedForm(arg);
   if (view === 'effects') bindEffectForm();
   if (view === 'settings') bindSettings();
