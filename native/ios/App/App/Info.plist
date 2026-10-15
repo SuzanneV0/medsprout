@@ -18,6 +18,8 @@
 	<string>$(PRODUCT_NAME)</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Medsprout uses the camera to read a prescription label. The photo is read on this device and is never uploaded or saved.</string>
 	<key>CFBundleShortVersionString</key>
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>

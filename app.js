@@ -1140,14 +1140,33 @@ function readMedForm(form, base) {
   };
 }
 
+/** Uses the same limits as sanitizeState, so nothing saved here is changed when the app next loads. */
 function validateMed(m) {
   if (!m.name) return 'Please enter the medication name.';
-  if (m.pillsPerDose <= 0) return 'Pills per dose must be more than 0.';
-  if (m.scheduleMode === 'custom' && !m.customTimes.length) return 'Add at least one dose time.';
-  if (m.scheduleMode === 'interval' && m.dosesPerDay * m.intervalHours > 24) return `${m.dosesPerDay} doses every ${m.intervalHours} h doesn't fit in 24 hours. Lower the times per day or the hours between doses.`;
+  if (m.name.length > 100) return 'The medication name can be at most 100 characters.';
+  if (m.strength.length > 60) return 'The strength can be at most 60 characters.';
+  if (m.instructions.length > 1000) return 'The label instructions can be at most 1,000 characters.';
+  if (m.pillsPerDose < 0.25 || m.pillsPerDose > 100) return 'Pills per dose must be between 0.25 and 100.';
+  if (m.scheduleMode === 'custom') {
+    if (!m.customTimes.length) return 'Add at least one dose time.';
+    if (m.customTimes.length > 12) return 'Medsprout can schedule at most 12 dose times a day.';
+    if (!m.customTimes.every(V.hhmm)) return 'Check the dose times: each one needs an hour and minutes.';
+    if (new Set(m.customTimes).size !== m.customTimes.length) return 'The same dose time is listed twice. Remove one of them.';
+  } else {
+    if (m.dosesPerDay < 1 || m.dosesPerDay > 12) return 'Times per day must be between 1 and 12.';
+    if (!V.hhmm(m.firstDose) || (m.scheduleMode === 'even' && !V.hhmm(m.lastDose))) return 'Check the dose times: each one needs an hour and minutes.';
+  }
+  if (m.scheduleMode === 'interval') {
+    if (m.intervalHours < 0.5 || m.intervalHours > 24) return 'Hours between doses must be between 0.5 and 24.';
+    if (m.dosesPerDay * m.intervalHours > 24) return `${m.dosesPerDay} doses every ${m.intervalHours} h doesn't fit in 24 hours. Lower the times per day or the hours between doses.`;
+  }
+  if (m.pillsPerBottle < 0 || m.pillsPerBottle > 100000 || m.pillsRemaining < 0 || m.pillsRemaining > 100000) return 'Pill counts must be between 0 and 100,000.';
+  if (m.refillsLeft !== '' && m.refillsLeft > 99) return 'Refills left must be 99 or fewer.';
   if (m.taper.enabled) {
-    if (m.taper.reduceBy <= 0) return 'The taper reduction must be more than 0.';
-    if (m.taper.startDaily <= 0) return 'Starting pills per day must be more than 0.';
+    if (!V.day(m.taper.startDate)) return 'Choose the date the taper starts.';
+    if (m.taper.reduceBy <= 0 || m.taper.reduceBy > 100) return 'The taper reduction must be more than 0 and at most 100.';
+    if (m.taper.startDaily <= 0 || m.taper.startDaily > 100) return 'Starting pills per day must be more than 0 and at most 100.';
+    if (m.taper.everyN > 52) return 'A taper step can be at most 52 days or weeks long.';
   }
   return '';
 }
@@ -1584,7 +1603,14 @@ function bindSettings() {
     else confirmImport(parsed);
   });
   $('#resetBtn').addEventListener('click', () => confirmBox('Erase all data?', 'This deletes every medication, dose record and side-effect note on this device. Export a backup first if you might need it.', 'Erase everything', true, () => {
-    state = defaults(); save(); toast('All data erased.'); location.hash = '#today'; render();
+    state = defaults(); save();
+    // Also remove copies kept aside by load() and any notification action waiting to be picked up.
+    try {
+      Object.keys(localStorage).filter(k => k === LEGACY_STORE_KEY || k.startsWith(`${STORE_KEY}:unreadable-`))
+        .forEach(k => localStorage.removeItem(k));
+    } catch (e) { /* storage unavailable */ }
+    if ('caches' in window) caches.delete('medsprout-pending').catch(() => {});
+    toast('All data erased.'); location.hash = '#today'; render();
   }));
 }
 
